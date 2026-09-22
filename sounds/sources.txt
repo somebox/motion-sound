@@ -1,0 +1,5 @@
+# ESPHome audio_file ID and upstream WAV URL
+meow_youtube_04 https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/youtube_yKb90ItHtn0_4.wav
+meow_youtube_27 https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/youtube_yKb90ItHtn0_27.wav
+meow_kaggle_36_0 https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/kaggle_cat_36_0.wav
+meow_kaggle_31_13 https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/kaggle_cat_31_13.wav

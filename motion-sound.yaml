@@ -32,13 +32,13 @@ globals:
 # These WAV files are embedded in firmware flash and exposed via audio-file://.
 audio_file:
   - id: meow_youtube_04
-    file: sounds/youtube_yKb90ItHtn0_4.wav
+    file: .cache/sounds/meow_youtube_04.wav
   - id: meow_youtube_27
-    file: sounds/youtube_yKb90ItHtn0_27.wav
+    file: .cache/sounds/meow_youtube_27.wav
   - id: meow_kaggle_36_0
-    file: sounds/kaggle_cat_36_0.wav
+    file: .cache/sounds/meow_kaggle_36_0.wav
   - id: meow_kaggle_31_13
-    file: sounds/kaggle_cat_31_13.wav
+    file: .cache/sounds/meow_kaggle_31_13.wav
 
 media_source:
   - platform: audio_file

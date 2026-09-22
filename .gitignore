@@ -1,5 +1,6 @@
-# ESPHome build/cache output
+# ESPHome build output and downloaded/processed sound cache
 .esphome/
+.cache/
 
 # Local credentials and generated state
 secrets.yaml

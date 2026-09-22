@@ -13,58 +13,44 @@ An example project for building a standalone ESPHome sound-effects (SFX) device.
 | Amplifier power and ground | — | 2.5–5.5 V at VIN; share GND with ESP32 |
 | Speaker output | — | Connect a 4 Ω+ speaker across the amplifier outputs; do not ground either output |
 
-The config now includes the GPIO33 motion input and local WAV playback through the MAX98357. Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
+Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
 
-For the amplifier pinout, see [Adafruit's MAX98357 pinout guide](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pinouts). The MAX98357 takes digital I²S (not analog audio), and MCLK is not required. Its speaker outputs are bridge-tied/floating: use a 4 Ω or higher moving-coil speaker across the output pair, and do not connect either speaker terminal to ground. The amp supply range is 2.5–5.5 V; Adafruit recommends 5 V for higher output power, with a supply sized for the speaker load. ESP32 3.3 V logic is compatible with the I²S inputs. Follow the markings/specifications for the specific amplifier breakout in use.
+For amplifier pinout details, see [Adafruit's MAX98357 pinout guide](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pinouts). The MAX98357 takes digital I²S (not analog audio), and MCLK is not required. Its speaker outputs are bridge-tied/floating: use a 4 Ω or higher moving-coil speaker across the output pair, and do not connect either speaker terminal to ground. The amp supply range is 2.5–5.5 V; Adafruit recommends 5 V for higher output power with a supply sized for the speaker load. ESP32 3.3 V logic is compatible with the I²S inputs. Follow the markings/specifications for the specific amplifier breakout in use.
 
-## Current bring-up
+## Build, flash, and logs
 
-- ESPHome CLI: `2026.7.3`
-- Board profile: `esp32dev` (classic ESP32 / ESP32-WROOM)
-- USB serial adapter detected by macOS as QinHeng CH340 (`1a86:7523`)
-- ESPHome/esptool detected an ESP32-D0WD-V3 (revision 3.1), 40 MHz crystal, 4 MB flash
-- USB serial device path varies by host; select the port for your board
-- Baseline motion firmware was compiled/uploaded and the sensor was confirmed working by the user
-- Four-sound random-playback firmware was previously uploaded successfully
-- Rebuilt after WAV cleanup (~373 KB of a 1.8 MB app partition), flashed successfully, and verified by esptool
-
-Validate, compile, and flash over USB:
+Requirements: Python 3, GNU Make (or compatible `make`), ESPHome CLI, and internet access for the initial WAV downloads.
 
 ```sh
-esphome config motion-sound.yaml
-esphome compile motion-sound.yaml
-PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT # macOS; Linux commonly uses /dev/ttyUSB0
-esphome upload motion-sound.yaml --device "$PORT"
-esphome logs motion-sound.yaml --device "$PORT"
+make config
+make compile
+make flash PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT # macOS; Linux commonly uses /dev/ttyUSB0
+make logs PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT
 ```
 
-If the first upload cannot enter bootloader mode automatically, hold the board's BOOT button while starting upload, then release it when writing begins.
+The motion input is GPIO33. The I²S connections are listed above. If the first upload cannot enter bootloader mode automatically, hold the board's BOOT button while starting the flash, then release it when writing begins.
+
+The sound URL manifest is [`sounds/sources.txt`](sounds/sources.txt). `make config`, `make compile`, `make flash`, and `make logs` prepare sounds before invoking ESPHome. Original downloads are cached under `.cache/sounds/downloads/`; normalized files consumed by ESPHome are under `.cache/sounds/`. Both are gitignored, so WAV binaries are not tracked in this repository.
+
+```sh
+make clean
+```
+
+`make clean` removes the sound cache and ESPHome build output. The next build command re-downloads the URLs and normalizes the WAVs again.
 
 ## Sound effects
 
-Four PCM WAV samples are embedded in flash using ESPHome's `audio_file` component; each is mono, 16-bit, 16 kHz and matches the configured I²S stream:
+The manifest maps these ESPHome `audio_file` IDs to source WAVs from [haydenroche5/meow_dataset](https://github.com/haydenroche5/meow_dataset):
 
-- [`youtube_yKb90ItHtn0_4.wav`](sounds/youtube_yKb90ItHtn0_4.wav)
-- [`youtube_yKb90ItHtn0_27.wav`](sounds/youtube_yKb90ItHtn0_27.wav)
-- [`kaggle_cat_36_0.wav`](sounds/kaggle_cat_36_0.wav)
-- [`kaggle_cat_31_13.wav`](sounds/kaggle_cat_31_13.wav)
+| ESPHome ID | Source WAV |
+| --- | --- |
+| `meow_youtube_04` | [youtube_yKb90ItHtn0_4.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/youtube_yKb90ItHtn0_4.wav) |
+| `meow_youtube_27` | [youtube_yKb90ItHtn0_27.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/youtube_yKb90ItHtn0_27.wav) |
+| `meow_kaggle_36_0` | [kaggle_cat_36_0.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/kaggle_cat_36_0.wav) |
+| `meow_kaggle_31_13` | [kaggle_cat_31_13.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/kaggle_cat_31_13.wav) |
 
-The samples are from [haydenroche5/meow_dataset](https://github.com/haydenroche5/meow_dataset). The source WAVs were already mono, 16-bit, 16 kHz, so downsampling was unnecessary. `scripts/prepare_sounds.py` rewrites them as simple `fmt`/`data` PCM WAVs, strips trailing metadata chunks, normalizes peaks to -1 dBFS, and pads odd sample counts by one silent frame. Two source clips had odd sample counts; the `kaggle_cat_31_13` clip was the one shown crashing in the supplied backtrace (selected index 3). These are likely decoder edge cases rather than a sample-rate mismatch.
+The source clips are already mono, 16-bit, 16 kHz, so downsampling is unnecessary. `scripts/prepare_sounds.py` fetches each URL, strips trailing metadata chunks, normalizes the peak to -1 dBFS, and pads an odd sample count by one silent frame. The padding avoids a decoder edge case observed with one odd-length clip. The normalized files are embedded in firmware flash.
 
-Each motion rising edge selects one of the four clips with `random_uint32()` and plays it if the player is idle. The logged index `0`–`3` corresponds to the list order above. Every additional embedded clip increases firmware/flash usage.
+Each motion rising edge selects one of the four clips with `random_uint32()` and plays it if the player is idle. The logged selection index `0`–`3` follows the order shown in `motion-sound.yaml`. Every additional embedded clip increases firmware/flash usage.
 
-To normalize newly added compatible 16 kHz mono 16-bit PCM clips in place before adding them to `audio_file`:
-
-```sh
-python3 scripts/prepare_sounds.py sounds/*.wav
-```
-
-To test or troubleshoot playback, set `PORT` as shown above, trigger motion, and watch the serial logs:
-
-```sh
-esphome logs motion-sound.yaml --device "$PORT"
-```
-
-The device logs the motion event and selected sound index, then plays the chosen sample through the connected speaker. Test all four selections across repeated motion events.
-
-Note: the motion sensor is documented here: https://github.com/tarantula3/RCWL-0516
+The presence sensor used during bring-up is documented at [RCWL-0516](https://github.com/tarantula3/RCWL-0516).
