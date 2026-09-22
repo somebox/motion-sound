@@ -1,0 +1,8 @@
+# ESPHome build/cache output
+.esphome/
+
+# Local credentials and generated state
+secrets.yaml
+__pycache__/
+*.py[cod]
+*.un~

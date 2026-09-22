@@ -1,0 +1,116 @@
+esphome:
+  name: motion-sound
+  friendly_name: Motion Sound
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+
+i2s_audio:
+  i2s_lrclk_pin: GPIO22
+  i2s_bclk_pin: GPIO17
+
+speaker:
+  - platform: i2s_audio
+    id: max98357_speaker
+    dac_type: external
+    i2s_dout_pin: GPIO15
+    channel: mono
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    i2s_comm_fmt: stand_i2s
+
+globals:
+  - id: random_sound_index
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+# These WAV files are embedded in firmware flash and exposed via audio-file://.
+audio_file:
+  - id: meow_youtube_04
+    file: sounds/youtube_yKb90ItHtn0_4.wav
+  - id: meow_youtube_27
+    file: sounds/youtube_yKb90ItHtn0_27.wav
+  - id: meow_kaggle_36_0
+    file: sounds/kaggle_cat_36_0.wav
+  - id: meow_kaggle_31_13
+    file: sounds/kaggle_cat_31_13.wav
+
+media_source:
+  - platform: audio_file
+    id: local_audio_files
+
+media_player:
+  - platform: speaker_source
+    id: motion_audio_player
+    name: "Motion Sound Player"
+    announcement_pipeline:
+      speaker: max98357_speaker
+      sources:
+        - local_audio_files
+      format: WAV
+      sample_rate: 16000
+      num_channels: 1
+
+script:
+  - id: play_random_meow
+    mode: single
+    then:
+      - if:
+          condition:
+            media_player.is_idle:
+              id: motion_audio_player
+          then:
+            - lambda: |-
+                id(random_sound_index) = random_uint32() % 4;
+                ESP_LOGI("motion_sound", "Selected sound index %u", id(random_sound_index));
+            - if:
+                condition:
+                  lambda: return id(random_sound_index) == 0;
+                then:
+                  - media_player.play_media:
+                      id: motion_audio_player
+                      media_url: "audio-file://meow_youtube_04"
+                      announcement: true
+            - if:
+                condition:
+                  lambda: return id(random_sound_index) == 1;
+                then:
+                  - media_player.play_media:
+                      id: motion_audio_player
+                      media_url: "audio-file://meow_youtube_27"
+                      announcement: true
+            - if:
+                condition:
+                  lambda: return id(random_sound_index) == 2;
+                then:
+                  - media_player.play_media:
+                      id: motion_audio_player
+                      media_url: "audio-file://meow_kaggle_36_0"
+                      announcement: true
+            - if:
+                condition:
+                  lambda: return id(random_sound_index) == 3;
+                then:
+                  - media_player.play_media:
+                      id: motion_audio_player
+                      media_url: "audio-file://meow_kaggle_31_13"
+                      announcement: true
+
+binary_sensor:
+  - platform: gpio
+    id: motion_sensor
+    name: "Motion"
+    device_class: motion
+    pin:
+      number: GPIO33
+      mode:
+        input: true
+    on_press:
+      then:
+        - logger.log: "Motion detected; choosing a random embedded meow"
+        - script.execute: play_random_meow
