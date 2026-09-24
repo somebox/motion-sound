@@ -1,3 +1,7 @@
+substitutions:
+  servo_pin: GPIO13
+  step_time: 25ms
+
 esphome:
   name: motion-sound
   friendly_name: Motion Sound
@@ -11,7 +15,7 @@ logger:
 
 i2s_audio:
   i2s_lrclk_pin: GPIO22
-  i2s_bclk_pin: GPIO17
+  i2s_bclk_pin: GPIO19
 
 speaker:
   - platform: i2s_audio
@@ -23,18 +27,18 @@ speaker:
     bits_per_sample: 16bit
     i2s_comm_fmt: stand_i2s
 
-stepper:
-  - platform: uln2003
-    id: cat_arm
-    pin_a: GPIO12
-    pin_b: GPIO14
-    pin_c: GPIO27
-    pin_d: GPIO26
-    step_mode: HALF_STEP
-    max_speed: 200 steps/s
-    acceleration: 300 steps/s^2
-    deceleration: 300 steps/s^2
-    sleep_when_done: true
+output:
+  - platform: ledc
+    id: servo_pwm
+    pin: ${servo_pin}
+    frequency: 50 Hz
+
+servo:
+  - id: cat_arm_servo
+    output: servo_pwm
+    min_level: 2.5%
+    idle_level: 7.5%
+    max_level: 12.5%
 
 globals:
   - id: random_sound_index
@@ -113,25 +117,51 @@ script:
                       id: motion_audio_player
                       media_url: "audio-file://meow_kaggle_31_13"
                       announcement: true
-  - id: wave_arm
+  - id: sweep_servo
     mode: single
     then:
-      - stepper.report_position:
-          id: cat_arm
-          position: 0
-      - stepper.set_target:
-          id: cat_arm
-          target: 460
-      - wait_until:
-          condition:
-            lambda: return id(cat_arm).has_reached_target();
-      - delay: 200ms
-      - stepper.set_target:
-          id: cat_arm
-          target: 0
-      - wait_until:
-          condition:
-            lambda: return id(cat_arm).has_reached_target();
+      - repeat:
+          count: 81
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 80.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return -0.2222f * eased;
+            - delay: ${step_time}
+      - repeat:
+          count: 81
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 80.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return -0.2222f + 0.4444f * eased;
+            - delay: ${step_time}
+      - repeat:
+          count: 81
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 80.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return 0.2222f - 0.4444f * eased;
+            - delay: ${step_time}
+      - repeat:
+          count: 81
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 80.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return -0.2222f * (1.0f - eased);
+            - delay: ${step_time}
+      - delay: 300ms
+      - servo.detach: cat_arm_servo
 
 binary_sensor:
   - platform: gpio
@@ -146,4 +176,4 @@ binary_sensor:
       then:
         - logger.log: "Motion detected; choosing a random embedded meow"
         - script.execute: play_random_meow
-        - script.execute: wave_arm
+        - script.execute: sweep_servo
