@@ -23,6 +23,19 @@ speaker:
     bits_per_sample: 16bit
     i2s_comm_fmt: stand_i2s
 
+stepper:
+  - platform: uln2003
+    id: cat_arm
+    pin_a: GPIO12
+    pin_b: GPIO14
+    pin_c: GPIO27
+    pin_d: GPIO26
+    step_mode: HALF_STEP
+    max_speed: 200 steps/s
+    acceleration: 300 steps/s^2
+    deceleration: 300 steps/s^2
+    sleep_when_done: true
+
 globals:
   - id: random_sound_index
     type: uint8_t
@@ -100,6 +113,25 @@ script:
                       id: motion_audio_player
                       media_url: "audio-file://meow_kaggle_31_13"
                       announcement: true
+  - id: wave_arm
+    mode: single
+    then:
+      - stepper.report_position:
+          id: cat_arm
+          position: 0
+      - stepper.set_target:
+          id: cat_arm
+          target: 460
+      - wait_until:
+          condition:
+            lambda: return id(cat_arm).has_reached_target();
+      - delay: 200ms
+      - stepper.set_target:
+          id: cat_arm
+          target: 0
+      - wait_until:
+          condition:
+            lambda: return id(cat_arm).has_reached_target();
 
 binary_sensor:
   - platform: gpio
@@ -114,3 +146,4 @@ binary_sensor:
       then:
         - logger.log: "Motion detected; choosing a random embedded meow"
         - script.execute: play_random_meow
+        - script.execute: wave_arm
