@@ -1,12 +1,13 @@
 # Motion Sound
 
-An example project for building a standalone ESPHome sound-effects (SFX) device. An ESP32-WROOM DevKit V1 reads a binary presence/motion sensor and randomly plays a short WAV sample stored in firmware flash through a MAX98357 I²S amplifier. A servo on the cat arm does one eased sweep and then releases when motion is detected. Detection, random selection, and playback run locally on the device; Wi-Fi and Home Assistant are not required.
+An example project for building a standalone ESPHome sound-effects (SFX) device, used to make an interactive object that plays and sound and moves something when motion is detected. An ESP32-WROOM DevKit V1 reads a binary presence/motion sensor and randomly plays a short WAV sample stored in firmware flash through a MAX98357 I²S amplifier. A servo on the cat arm does one eased sweep and then releases when motion is detected. Detection, random selection, and playback run locally on the device; Wi-Fi and Home Assistant are not required.
 
 ## Hardware and wiring
 
 | Signal | ESP32 GPIO | Connect to |
 | --- | ---: | --- |
 | Motion sensor output | GPIO33 | Binary sensor output |
+| Button | GPIO32 | Momentary switch to GND (internal pull-up) |
 | Servo signal | GPIO13 | Servo PWM, 50 Hz |
 | I²S data out (DIN) | GPIO15 | MAX98357 DIN |
 | I²S word select (LRCLK/WS) | GPIO22 | MAX98357 LRCLK |
@@ -14,7 +15,7 @@ An example project for building a standalone ESPHome sound-effects (SFX) device.
 | Amplifier power and ground | — | 2.5–5.5 V at VIN; share GND with ESP32 |
 | Speaker output | — | Connect a 4 Ω+ speaker across the amplifier outputs; do not ground either output |
 
-On each motion rising edge the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. Another detection during that sweep is ignored. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
+On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. Another trigger during that sweep is ignored. Holding the button for at least 3 seconds toggles sound mute; the arm still moves while muted, and the mute state is kept across reboot. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
 
 Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
 
@@ -54,6 +55,6 @@ The manifest maps these ESPHome `audio_file` IDs to source WAVs from [haydenroch
 
 The source clips are already mono, 16-bit, 16 kHz, so downsampling is unnecessary. `scripts/prepare_sounds.py` fetches each URL, strips trailing metadata chunks, normalizes the peak to -1 dBFS, and pads an odd sample count by one silent frame. The padding avoids a decoder edge case observed with one odd-length clip. The normalized files are embedded in firmware flash.
 
-Each motion rising edge selects one of the four clips with `random_uint32()` and plays it if the player is idle. The logged selection index `0`–`3` follows the order shown in `motion-sound.yaml`. Every additional embedded clip increases firmware/flash usage.
+Each motion rising edge, and each short press of the GPIO32 button, selects one of the four clips with `random_uint32()` and plays it if the player is idle and sound is not muted. The logged selection index `0`–`3` follows the order shown in `motion-sound.yaml`. Every additional embedded clip increases firmware/flash usage. A button hold of at least 3 seconds toggles mute and stops any clip that is playing.
 
 The presence sensor used during bring-up is documented at [RCWL-0516](https://github.com/tarantula3/RCWL-0516).

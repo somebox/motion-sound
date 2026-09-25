@@ -45,6 +45,10 @@ globals:
     type: uint8_t
     restore_value: no
     initial_value: "0"
+  - id: sound_muted
+    type: bool
+    restore_value: yes
+    initial_value: "false"
 
 # These WAV files are embedded in firmware flash and exposed via audio-file://.
 audio_file:
@@ -74,13 +78,32 @@ media_player:
       num_channels: 1
 
 script:
+  - id: play_motion_sequence
+    mode: single
+    then:
+      - script.execute: play_random_meow
+      - script.execute: sweep_servo
+  - id: toggle_sound_mute
+    mode: single
+    then:
+      - lambda: |-
+          id(sound_muted) = !id(sound_muted);
+          ESP_LOGI("motion_sound", "Sound %s", id(sound_muted) ? "muted" : "unmuted");
+      - if:
+          condition:
+            lambda: return id(sound_muted);
+          then:
+            - media_player.stop:
+                id: motion_audio_player
   - id: play_random_meow
     mode: single
     then:
       - if:
           condition:
-            media_player.is_idle:
-              id: motion_audio_player
+            and:
+              - lambda: return !id(sound_muted);
+              - media_player.is_idle:
+                  id: motion_audio_player
           then:
             - lambda: |-
                 id(random_sound_index) = random_uint32() % 4;
@@ -175,5 +198,29 @@ binary_sensor:
     on_press:
       then:
         - logger.log: "Motion detected; choosing a random embedded meow"
-        - script.execute: play_random_meow
-        - script.execute: sweep_servo
+        - script.execute: play_motion_sequence
+  - platform: gpio
+    id: control_button
+    name: "Button"
+    pin:
+      number: GPIO32
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on_off: 20ms
+    on_multi_click:
+      - timing:
+          - ON for at least 3s
+        invalid_cooldown: 0s
+        then:
+          - logger.log: "Long press; toggling sound mute"
+          - script.execute: toggle_sound_mute
+      - timing:
+          - ON for 50ms to 3s
+          - OFF for at least 50ms
+        invalid_cooldown: 0s
+        then:
+          - logger.log: "Short press; playing sound and moving the arm"
+          - script.execute: play_motion_sequence
