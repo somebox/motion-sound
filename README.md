@@ -1,8 +1,14 @@
 # Motion Sound
 
-An example project for building a standalone ESPHome sound-effects (SFX) device, used to make an interactive object that plays and sound and moves something when motion is detected. An ESP32-WROOM DevKit V1 reads a binary presence/motion sensor and randomly plays a short WAV sample stored in firmware flash through a MAX98357 I²S amplifier. A servo on the cat arm does one eased sweep and then releases when motion is detected. Detection, random selection, and playback run locally on the device; Wi-Fi and Home Assistant are not required.
+An example project for building a standalone ESPHome sound-effects (SFX) device, used to make an interactive object that plays a sound and moves something when motion is detected. An ESP32-WROOM DevKit V1 reads a binary presence/motion sensor and randomly plays a short WAV sample stored in firmware flash through a MAX98357 I²S amplifier. A servo on the cat arm does one eased sweep and then releases when motion is detected. Detection, random selection, and playback run locally on the device; Wi-Fi and Home Assistant are not required.
+
+![Three prototype builds on perfboard: ESP32 DevKit V1 boards with MAX98357A amplifiers, an RCWL-0516 sensor, and a speaker](media/boards.jpg)
 
 ## Hardware and wiring
+
+![Wiring diagram: ESP32 DevKit V1 connected to an RCWL-0516 motion sensor, MAX98357A I²S amplifier and speaker, SG90 servo, and push button](media/wiring-diagram.png)
+
+The diagram draws every part at the same scale (wire lengths are not to scale). It takes 5 V for the servo, sensor, and amplifier from the ESP32 VIN pin, which carries USB 5 V.
 
 | Signal | ESP32 GPIO | Connect to |
 | --- | ---: | --- |
@@ -11,11 +17,11 @@ An example project for building a standalone ESPHome sound-effects (SFX) device,
 | Servo signal | GPIO13 | Servo PWM, 50 Hz |
 | I²S data out (DIN) | GPIO15 | MAX98357 DIN |
 | I²S word select (LRCLK/WS) | GPIO22 | MAX98357 LRCLK |
-| I²S bit clock (BCLK) | GPIO17 | MAX98357 BCLK |
+| I²S bit clock (BCLK) | GPIO19 | MAX98357 BCLK |
 | Amplifier power and ground | — | 2.5–5.5 V at VIN; share GND with ESP32 |
 | Speaker output | — | Connect a 4 Ω+ speaker across the amplifier outputs; do not ground either output |
 
-On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. Another trigger during that sweep is ignored. Holding the button for at least 3 seconds toggles sound mute; the arm still moves while muted, and the mute state is kept across reboot. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
+On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. The arm ignores new triggers until its sweep finishes (about 8 s), but a trigger during the sweep can still play another clip once the current one has finished. Holding the button for at least 3 seconds toggles sound mute; the arm still moves while muted, and the mute state is kept across reboot. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
 
 Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
 
