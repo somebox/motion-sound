@@ -146,18 +146,140 @@ def normalize(source: Path, destination: Path) -> None:
     )
 
 
+def extended80_to_float(raw: bytes) -> float:
+    """Decode an 80-bit AIFF sample-rate value."""
+    sign = raw[0] >> 7
+    exponent = ((raw[0] & 0x7F) << 8 | raw[1]) - 16383
+    mantissa = int.from_bytes(raw[2:10], "big")
+    if mantissa == 0:
+        return 0.0
+    value = (mantissa / 2**63) * 2**exponent
+    return -value if sign else value
+
+
+def mix_to_mono(samples: list[int], channels: int) -> list[int]:
+    if channels == 1:
+        return samples
+    mixed = []
+    for index in range(0, len(samples) - channels + 1, channels):
+        frame = samples[index : index + channels]
+        mixed.append(int(round(sum(frame) / channels)))
+    return mixed
+
+
+def read_wav_pcm(path: Path) -> tuple[list[int], int]:
+    with wave.open(str(path), "rb") as wav:
+        params = wav.getparams()
+        if params.sampwidth != 2 or params.comptype != "NONE":
+            raise ValueError(
+                f"{path}: expected 16-bit PCM; got {params.sampwidth * 8}-bit, "
+                f"compression={params.comptype}"
+            )
+        raw = wav.readframes(params.nframes)
+    samples = list(struct.unpack(f"<{len(raw) // 2}h", raw))
+    return mix_to_mono(samples, params.nchannels), params.framerate
+
+
+def read_aiff_pcm(path: Path) -> tuple[list[int], int]:
+    data = path.read_bytes()
+    if data[:4] != b"FORM" or data[8:12] != b"AIFF":
+        raise ValueError(f"{path}: not an AIFF file")
+
+    channels = frames = bits = rate = None
+    pcm = None
+    pos = 12
+    while pos + 8 <= len(data):
+        chunk_id = data[pos : pos + 4]
+        chunk_size = struct.unpack(">I", data[pos + 4 : pos + 8])[0]
+        body = data[pos + 8 : pos + 8 + chunk_size]
+        if chunk_id == b"COMM" and len(body) >= 18:
+            channels, frames, bits = struct.unpack(">HIH", body[:8])
+            rate = int(round(extended80_to_float(body[8:18])))
+        elif chunk_id == b"SSND" and len(body) >= 8:
+            offset = struct.unpack(">I", body[:4])[0]
+            pcm = body[8 + offset :]
+        pos += 8 + chunk_size + (chunk_size & 1)
+
+    if None in (channels, frames, bits, rate) or pcm is None:
+        raise ValueError(f"{path}: AIFF is missing COMM or SSND")
+    if bits != 16:
+        raise ValueError(f"{path}: expected 16-bit AIFF samples, got {bits}-bit")
+
+    count = frames * channels
+    samples = list(struct.unpack(f">{count}h", pcm[: count * 2]))
+    return mix_to_mono(samples, channels), rate
+
+
+def read_pcm(path: Path) -> tuple[list[int], int]:
+    header = path.read_bytes()[:12]
+    if header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return read_wav_pcm(path)
+    if header[:4] == b"FORM" and header[8:12] == b"AIFF":
+        return read_aiff_pcm(path)
+    raise ValueError(f"{path}: expected a RIFF/WAVE or AIFF file")
+
+
+def resample(samples: list[int], source_rate: int, target_rate: int) -> list[int]:
+    if source_rate == target_rate or len(samples) <= 1:
+        return samples
+    target_length = max(1, int(round(len(samples) * target_rate / source_rate)))
+    if target_length == 1:
+        return [samples[0]]
+    scale = (len(samples) - 1) / (target_length - 1)
+    output = []
+    for index in range(target_length):
+        position = index * scale
+        left = int(position)
+        fraction = position - left
+        right = min(left + 1, len(samples) - 1)
+        output.append(
+            int(round(samples[left] * (1.0 - fraction) + samples[right] * fraction))
+        )
+    return output
+
+
+def prepare_sfx(sfx_dir: Path, cache_dir: Path) -> None:
+    """Convert local cue clips to the mono 16 kHz WAVs embedded in firmware."""
+    sources = (
+        ("beep", "beep.wav"),
+        ("three_beeps", "3beeps.wav"),
+        ("growl", "growl.wav"),
+    )
+    for audio_id, filename in sources:
+        source = sfx_dir / filename
+        samples, rate = read_pcm(source)
+        converted = resample(samples, rate, SAMPLE_RATE)
+        with tempfile.NamedTemporaryFile(
+            prefix=f".{audio_id}.", suffix=".wav", dir=cache_dir, delete=False
+        ) as tmp:
+            temp_path = Path(tmp.name)
+        try:
+            with wave.open(str(temp_path), "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(SAMPLE_RATE)
+                if converted:
+                    wav.writeframes(struct.pack(f"<{len(converted)}h", *converted))
+            normalize(temp_path, cache_dir / f"{audio_id}.wav")
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=Path("sounds/sources.txt"))
     parser.add_argument("--cache-dir", type=Path, default=Path(".cache/sounds"))
+    parser.add_argument("--sfx-dir", type=Path, default=Path("media/sfx"))
     args = parser.parse_args()
 
     try:
+        args.cache_dir.mkdir(parents=True, exist_ok=True)
         entries = load_manifest(args.manifest)
         download_dir = args.cache_dir / "downloads"
         for audio_id, url in entries:
             source = download_source(audio_id, url, download_dir)
             normalize(source, args.cache_dir / f"{audio_id}.wav")
+        prepare_sfx(args.sfx_dir, args.cache_dir)
     except (OSError, ValueError, wave.Error) as err:
         parser.exit(1, f"prepare_sounds.py: error: {err}\n")
 

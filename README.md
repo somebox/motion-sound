@@ -21,7 +21,7 @@ The diagram draws every part at the same scale (wire lengths are not to scale). 
 | Amplifier power and ground | — | 2.5–5.5 V at VIN; share GND with ESP32 |
 | Speaker output | — | Connect a 4 Ω+ speaker across the amplifier outputs; do not ground either output |
 
-On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. The arm ignores new triggers until its sweep finishes (about 8 s), but a trigger during the sweep can still play another clip once the current one has finished. Holding the button for at least 3 seconds toggles sound mute; the arm still moves while muted, and the mute state is kept across reboot. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
+On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. The arm ignores new triggers until its sweep finishes (about 8 s), but a trigger during the sweep can still play another clip once the current one has finished. Holding the button for 3 seconds toggles sound mute: `beep.wav` plays when mute turns on, and `3beeps.wav` plays when it turns off. `3beeps.wav` also plays when boot finishes. Holding past 6 seconds plays `growl.wav` and wiggles the arm for about 2 seconds over a shorter arc at about 3× the sweep step rate. That hold still toggles mute at the 3 second mark. Mute is kept across reboot, and these cue sounds play even while meows are muted. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
 
 Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
 
@@ -40,7 +40,7 @@ make logs PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT
 
 The motion input is GPIO33. The I²S connections are listed above. If the first upload cannot enter bootloader mode automatically, hold the board's BOOT button while starting the flash, then release it when writing begins.
 
-The sound URL manifest is [`sounds/sources.txt`](sounds/sources.txt). `make config`, `make compile`, `make flash`, and `make logs` prepare sounds before invoking ESPHome. Original downloads are cached under `.cache/sounds/downloads/`; normalized files consumed by ESPHome are under `.cache/sounds/`. Both are gitignored, so WAV binaries are not tracked in this repository.
+The sound URL manifest is [`sounds/sources.txt`](sounds/sources.txt). Cue clips live in [`media/sfx/`](media/sfx/). `make config`, `make compile`, `make flash`, and `make logs` prepare sounds before invoking ESPHome. Original downloads are cached under `.cache/sounds/downloads/`; normalized files consumed by ESPHome are under `.cache/sounds/`. Both are gitignored, so generated WAV binaries are not tracked in this repository. The `media/sfx/` sources are tracked.
 
 ```sh
 make clean
@@ -59,8 +59,14 @@ The manifest maps these ESPHome `audio_file` IDs to source WAVs from [haydenroch
 | `meow_kaggle_36_0` | [kaggle_cat_36_0.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/kaggle_cat_36_0.wav) |
 | `meow_kaggle_31_13` | [kaggle_cat_31_13.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/kaggle_cat_31_13.wav) |
 
-The source clips are already mono, 16-bit, 16 kHz, so downsampling is unnecessary. `scripts/prepare_sounds.py` fetches each URL, strips trailing metadata chunks, normalizes the peak to -1 dBFS, and pads an odd sample count by one silent frame. The padding avoids a decoder edge case observed with one odd-length clip. The normalized files are embedded in firmware flash.
+The meow source clips are already mono, 16-bit, 16 kHz, so downsampling is unnecessary. `scripts/prepare_sounds.py` fetches each URL, strips trailing metadata chunks, normalizes the peak to -1 dBFS, and pads an odd sample count by one silent frame. The padding avoids a decoder edge case observed with one odd-length clip. The same script converts `media/sfx/` to mono 16 kHz: `beep.wav` is mixed down from stereo, and `growl.wav` is decoded from AIFF. The normalized files are embedded in firmware flash.
 
-Each motion rising edge, and each short press of the GPIO32 button, selects one of the four clips with `random_uint32()` and plays it if the player is idle and sound is not muted. The logged selection index `0`–`3` follows the order shown in `motion-sound.yaml`. Every additional embedded clip increases firmware/flash usage. A button hold of at least 3 seconds toggles mute and stops any clip that is playing.
+| ESPHome ID | Source | When it plays |
+| --- | --- | --- |
+| `beep` | `media/sfx/beep.wav` | Mute turns on after a 3 second hold |
+| `three_beeps` | `media/sfx/3beeps.wav` | Mute turns off, and when boot finishes |
+| `growl` | `media/sfx/growl.wav` | Button held for 6 seconds, with the arm wiggle |
+
+Each motion rising edge, and each short press of the GPIO32 button, selects one of the four meow clips with `random_uint32()` and plays it if the player is idle and sound is not muted. The logged selection index `0`–`3` follows the order shown in `motion-sound.yaml`. Every additional embedded clip increases firmware/flash usage. A button hold of 3 seconds toggles mute and stops any meow that is playing. A hold of 6 seconds plays the growl and wiggles the arm.
 
 The presence sensor used during bring-up is documented at [RCWL-0516](https://github.com/tarantula3/RCWL-0516).

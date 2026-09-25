@@ -1,10 +1,17 @@
 substitutions:
   servo_pin: GPIO13
   step_time: 25ms
+  wiggle_step_time: 8ms
 
 esphome:
   name: motion-sound
   friendly_name: Motion Sound
+  on_boot:
+    priority: -100
+    then:
+      - script.execute:
+          id: play_cue
+          url: "audio-file://three_beeps"
 
 esp32:
   board: esp32dev
@@ -12,6 +19,8 @@ esp32:
     type: esp-idf
 
 logger:
+  logs:
+    servo: WARN
 
 i2s_audio:
   i2s_lrclk_pin: GPIO22
@@ -49,6 +58,10 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "false"
+  - id: arm_segment_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
 
 # These WAV files are embedded in firmware flash and exposed via audio-file://.
 audio_file:
@@ -60,6 +73,12 @@ audio_file:
     file: .cache/sounds/meow_kaggle_36_0.wav
   - id: meow_kaggle_31_13
     file: .cache/sounds/meow_kaggle_31_13.wav
+  - id: beep
+    file: .cache/sounds/beep.wav
+  - id: three_beeps
+    file: .cache/sounds/three_beeps.wav
+  - id: growl
+    file: .cache/sounds/growl.wav
 
 media_source:
   - platform: audio_file
@@ -78,6 +97,23 @@ media_player:
       num_channels: 1
 
 script:
+  - id: mark_arm_segment
+    parameters:
+      end_name: string
+    then:
+      - lambda: |-
+          const uint32_t elapsed = millis() - id(arm_segment_started_ms);
+          ESP_LOGI("motion_sound", "Arm reached %s in %u ms", end_name.c_str(), static_cast<unsigned>(elapsed));
+          id(arm_segment_started_ms) = millis();
+  - id: play_cue
+    mode: restart
+    parameters:
+      url: string
+    then:
+      - media_player.play_media:
+          id: motion_audio_player
+          media_url: !lambda return url;
+          announcement: true
   - id: play_motion_sequence
     mode: single
     then:
@@ -95,6 +131,25 @@ script:
           then:
             - media_player.stop:
                 id: motion_audio_player
+            - delay: 50ms
+            - script.execute:
+                id: play_cue
+                url: "audio-file://beep"
+          else:
+            - script.execute:
+                id: play_cue
+                url: "audio-file://three_beeps"
+  - id: growl_wiggle
+    mode: single
+    then:
+      - script.stop: sweep_servo
+      - media_player.stop:
+          id: motion_audio_player
+      - delay: 50ms
+      - script.execute:
+          id: play_cue
+          url: "audio-file://growl"
+      - script.execute: wiggle_arm
   - id: play_random_meow
     mode: single
     then:
@@ -143,6 +198,7 @@ script:
   - id: sweep_servo
     mode: single
     then:
+      - lambda: id(arm_segment_started_ms) = millis();
       - repeat:
           count: 81
           then:
@@ -153,6 +209,9 @@ script:
                   const float eased = progress * progress * (3.0f - 2.0f * progress);
                   return -0.2222f * eased;
             - delay: ${step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "sweep negative end"
       - repeat:
           count: 81
           then:
@@ -163,6 +222,9 @@ script:
                   const float eased = progress * progress * (3.0f - 2.0f * progress);
                   return -0.2222f + 0.4444f * eased;
             - delay: ${step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "sweep positive end"
       - repeat:
           count: 81
           then:
@@ -173,6 +235,9 @@ script:
                   const float eased = progress * progress * (3.0f - 2.0f * progress);
                   return 0.2222f - 0.4444f * eased;
             - delay: ${step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "sweep negative end"
       - repeat:
           count: 81
           then:
@@ -183,7 +248,76 @@ script:
                   const float eased = progress * progress * (3.0f - 2.0f * progress);
                   return -0.2222f * (1.0f - eased);
             - delay: ${step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "sweep center"
       - delay: 300ms
+      - servo.detach: cat_arm_servo
+  - id: wiggle_cycle
+    mode: restart
+    then:
+      - repeat:
+          count: 15
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 14.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return 0.074f * eased;
+            - delay: ${wiggle_step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "wiggle positive end"
+      - repeat:
+          count: 15
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 14.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return 0.074f * (1.0f - eased);
+            - delay: ${wiggle_step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "wiggle center"
+      - repeat:
+          count: 15
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 14.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return -0.074f * eased;
+            - delay: ${wiggle_step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "wiggle negative end"
+      - repeat:
+          count: 15
+          then:
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  const float progress = iteration / 14.0f;
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return -0.074f * (1.0f - eased);
+            - delay: ${wiggle_step_time}
+      - script.execute:
+          id: mark_arm_segment
+          end_name: "wiggle center"
+  - id: wiggle_arm
+    mode: restart
+    then:
+      - script.stop: wiggle_cycle
+      - lambda: id(arm_segment_started_ms) = millis();
+      - repeat:
+          count: 4
+          then:
+            - script.execute: wiggle_cycle
+      - delay: 100ms
       - servo.detach: cat_arm_servo
 
 binary_sensor:
@@ -212,10 +346,16 @@ binary_sensor:
       - delayed_on_off: 20ms
     on_multi_click:
       - timing:
+          - ON for at least 6s
+        invalid_cooldown: 0s
+        then:
+          - logger.log: "Held 6 seconds; growl and wiggle"
+          - script.execute: growl_wiggle
+      - timing:
           - ON for at least 3s
         invalid_cooldown: 0s
         then:
-          - logger.log: "Long press; toggling sound mute"
+          - logger.log: "Held 3 seconds; toggling sound mute"
           - script.execute: toggle_sound_mute
       - timing:
           - ON for 50ms to 3s
