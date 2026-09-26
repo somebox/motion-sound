@@ -27,6 +27,8 @@ Home Assistant gets these buttons: **Animate Arm** (arm sweep only), **Meow** (r
 
 Two diagnostic sensors help track stability: **Uptime** (seconds since boot, updated every minute) and **Last Reset Reason** (for example power-on, `software via esp_restart` after an OTA update, task or interrupt watchdog, brownout, or a crash/panic). Home Assistant lists them in the device's Diagnostic section.
 
+The player volume starts at 75% on a freshly flashed device. After you change it (for example from the Motion Sound Player in Home Assistant), the new volume is saved and kept across reboots and OTA updates.
+
 If the saved Wi-Fi network can't be reached for 1 minute, the device starts a fallback hotspot named after the device (for example `gato-dorado-98d3d0`), protected by `fallback_ap_password` in `secrets.yaml`. That file is gitignored: copy [`secrets.example.yaml`](secrets.example.yaml) to `secrets.yaml` and set your own password (at least 8 characters) before building; the Makefile stops with a message if it is missing. Join it from a phone or laptop: the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. OTA and the Home Assistant API also work over the hotspot. The device keeps retrying the saved network while the hotspot is up.
 
 The **Mute** switch shows and sets the same sound mute as the 3–6 second button hold, with the same beep cues; it follows button changes too.

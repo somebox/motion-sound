@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.20"
+  firmware_version: "0.1.21"
 
   # Duration of each beckon sweep segment (center-front, front-back, back-center)
   # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
@@ -236,6 +236,8 @@ media_player:
   - platform: speaker_source
     id: motion_audio_player
     name: "Motion Sound Player"
+    # Used until a volume has been saved; a volume set later is kept across reboots.
+    volume_initial: 75%
     announcement_pipeline:
       speaker: max98357_speaker
       sources:
