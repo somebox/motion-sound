@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.0"
+  firmware_version: "0.1.1"
 
   # Pause between arm positions during a beckon sweep.
   step_time: 25ms
@@ -423,10 +423,12 @@ script:
     then:
       - script.stop: wiggle_cycle
       - lambda: id(arm_segment_started_ms) = millis();
+      # script.execute returns immediately, so wait for each cycle to finish.
       - repeat:
           count: 4
           then:
             - script.execute: wiggle_cycle
+            - script.wait: wiggle_cycle
       - delay: 100ms
       - servo.detach: cat_arm_servo
 
