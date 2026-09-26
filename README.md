@@ -21,7 +21,7 @@ The diagram draws every part at the same scale (wire lengths are not to scale). 
 | Amplifier power and ground | — | 2.5–5.5 V at VIN; share GND with ESP32 |
 | Speaker output | — | Connect a 4 Ω+ speaker across the amplifier outputs; do not ground either output |
 
-On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. The arm ignores new triggers until its sweep finishes (about 8 s), but a trigger during the sweep can still play another clip once the current one has finished. Releasing the button after 3 seconds and before 6 seconds toggles sound mute: `beep.wav` plays when mute turns on, and `3beeps.wav` plays when it turns off. Holding past 6 seconds plays `growl.wav` and wiggles the arm for about 2 seconds over a shorter arc at about 3× the sweep step rate, and does not change mute. Boot plays `beep.wav` unless `boot_sound` is set to `win_startup`. Mute is kept across reboot, and these cue sounds play even while meows are muted. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
+On each motion rising edge, and on a short button press, the servo eases away from center, does one out-and-back sweep (`sweep_servo`), eases back to center, then detaches so it does not hold torque against an endstop. The arm ignores new triggers until its sweep finishes (about 8 s), but a trigger during the sweep can still play another clip once the current one has finished. Releasing the button after 3 seconds and before 6 seconds toggles sound mute: `beep.wav` plays when mute turns on, and `3beeps.wav` plays when it turns off. Holding past 6 seconds plays `growl.wav` and wiggles the arm for about 2 seconds over a shorter arc at about 3× the sweep step rate, and does not change mute. Boot plays the clip named by `boot_sound`: `win-startup.wav` as configured, or `beep.wav` when it is set to `beep`. Mute is kept across reboot, and these cue sounds play even while meows are muted. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
 
 Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
 
@@ -63,9 +63,9 @@ The meow source clips are already mono, 16-bit, 16 kHz, so downsampling is unnec
 
 | ESPHome ID | Source | When it plays |
 | --- | --- | --- |
-| `beep` | `media/sfx/beep.wav` | Mute turns on, and the default boot clip |
+| `beep` | `media/sfx/beep.wav` | Mute turns on, and boot when `boot_sound` is `beep` |
 | `three_beeps` | `media/sfx/3beeps.wav` | Mute turns off |
-| `win_startup` | `media/sfx/win-startup.wav` | Boot, when `boot_sound` is `win_startup` |
+| `win_startup` | `media/sfx/win-startup.wav` | Boot, when `boot_sound` is `win_startup` (the configured default) |
 | `growl` | `media/sfx/growl.wav` | Button held for 6 seconds, with the arm wiggle |
 | `purring` | `media/sfx/purring.wav` | Random motion or short-press clip, weighted by `purr_ratio` |
 
