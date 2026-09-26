@@ -35,12 +35,16 @@ Requirements: Python 3, GNU Make (or compatible `make`), ESPHome CLI, and intern
 make config
 make compile
 make flash PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT # macOS; Linux commonly uses /dev/ttyUSB0
+make ota                                    # uses gato-dorado-2e90.local
+make ota OTA_HOST=10.0.1.23                # bypasses mDNS
 make logs PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT
 ```
 
 The motion input is GPIO33. The I²S connections are listed above. If the first upload cannot enter bootloader mode automatically, hold the board's BOOT button while starting the flash, then release it when writing begins.
 
-The sound URL manifest is [`sounds/sources.txt`](sounds/sources.txt). Cue clips live in [`media/sfx/`](media/sfx/). `make config`, `make compile`, `make flash`, and `make logs` prepare sounds before invoking ESPHome. Original downloads are cached under `.cache/sounds/downloads/`; normalized files consumed by ESPHome are under `.cache/sounds/`. Both are gitignored, so generated WAV binaries are not tracked in this repository. The `media/sfx/` sources are tracked.
+The OTA target compiles first and uploads the generated OTA binary on port `3232`. It uses `python3` by default; set `OTA_PYTHON` to a Python environment containing ESPHome when needed. Set `OTA_PASSWORD` if the device has an OTA password.
+
+The sound URL manifest is [`sounds/sources.txt`](sounds/sources.txt). Cue clips live in [`media/sfx/`](media/sfx/). `make config`, `make compile`, `make flash`, `make ota`, and `make logs` prepare sounds before invoking ESPHome. Original downloads are cached under `.cache/sounds/downloads/`; normalized files consumed by ESPHome are under `.cache/sounds/`. Both are gitignored, so generated WAV binaries are not tracked in this repository. The `media/sfx/` sources are tracked.
 
 ```sh
 make clean
