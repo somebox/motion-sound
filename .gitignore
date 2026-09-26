@@ -1,6 +1,8 @@
 # ESPHome build output and downloaded/processed sound cache
 .esphome/
 .cache/
+.venv/
+.venv-ota/
 
 # Local credentials and generated state
 secrets.yaml
