@@ -25,7 +25,9 @@ On each motion rising edge, and on a short button press, the servo eases from ce
 
 Home Assistant gets these buttons: **Animate Arm** (arm sweep only), **Meow** (random meow only), and **Meow and Arm** (both). A **Hola** button plays only the hola clip, for debugging. These manual actions ignore mute and the meow rate limit; the arm sweep is still skipped if the arm is already moving.
 
-If the saved Wi-Fi network can't be reached for 1 minute, the device starts a fallback hotspot named after the device (for example `gato-dorado-2e90`), protected by `fallback_ap_password` in `secrets.yaml`. That file is gitignored: copy [`secrets.example.yaml`](secrets.example.yaml) to `secrets.yaml` and set your own password (at least 8 characters) before building; the Makefile stops with a message if it is missing. Join it from a phone or laptop: the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. OTA and the Home Assistant API also work over the hotspot. The device keeps retrying the saved network while the hotspot is up.
+Two diagnostic sensors help track stability: **Uptime** (seconds since boot, updated every minute) and **Last Reset Reason** (for example power-on, `software via esp_restart` after an OTA update, task or interrupt watchdog, brownout, or a crash/panic). Home Assistant lists them in the device's Diagnostic section.
+
+If the saved Wi-Fi network can't be reached for 1 minute, the device starts a fallback hotspot named after the device (for example `gato-dorado-98d3d0`), protected by `fallback_ap_password` in `secrets.yaml`. That file is gitignored: copy [`secrets.example.yaml`](secrets.example.yaml) to `secrets.yaml` and set your own password (at least 8 characters) before building; the Makefile stops with a message if it is missing. Join it from a phone or laptop: the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. OTA and the Home Assistant API also work over the hotspot. The device keeps retrying the saved network while the hotspot is up.
 
 The **Mute** switch shows and sets the same sound mute as the 3–6 second button hold, with the same beep cues; it follows button changes too.
 
@@ -43,7 +45,7 @@ Requirements: Python 3.12 or newer, GNU Make (or compatible `make`), and interne
 make config
 make compile
 make flash PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT # macOS; Linux commonly uses /dev/ttyUSB0
-make ota                                    # uses gato-dorado-2e90.local
+make ota OTA_HOST=gato-dorado-98d3d0.local # device name from its MAC
 make ota OTA_HOST=10.0.1.23                # bypasses mDNS
 make logs PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT
 ```

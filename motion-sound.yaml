@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.18"
+  firmware_version: "0.1.20"
 
   # Duration of each beckon sweep segment (center-front, front-back, back-center)
   # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
@@ -39,8 +39,11 @@ substitutions:
   i2s_dout_pin: GPIO15
 
 esphome:
-  name: gato-dorado-2e90
-  friendly_name: GatoDorado-2E90
+  # The last 6 hex digits of the MAC are appended at runtime, e.g. gato-dorado-98d3d0,
+  # so every device flashed from this file gets a unique name.
+  name: gato-dorado
+  friendly_name: GatoDorado
+  name_add_mac_suffix: true
   on_boot:
     priority: -100
     then:
@@ -83,6 +86,10 @@ logger:
 i2s_audio:
   i2s_lrclk_pin: ${i2s_lrclk_pin}
   i2s_bclk_pin: ${i2s_bclk_pin}
+
+# Provides the reset reason text sensor below.
+debug:
+  update_interval: 5min
 
 speaker:
   - platform: i2s_audio
@@ -617,3 +624,14 @@ button:
       - script.execute:
           id: play_cue
           url: "audio-file://hola"
+
+sensor:
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+
+text_sensor:
+  # Why the last reset happened: power-on, software reset (e.g. OTA), watchdog, brownout, crash.
+  - platform: debug
+    reset_reason:
+      name: "Last Reset Reason"

@@ -13,10 +13,10 @@ ESPHOME := $(VENV_DIR)/bin/esphome
 OTA_PYTHON := $(OTA_VENV_DIR)/bin/python
 ESPHOME_STAMP := $(VENV_DIR)/.installed
 OTA_ESPHOME_STAMP := $(OTA_VENV_DIR)/.installed
-OTA_HOST ?= gato-dorado-2e90.local
+OTA_HOST ?=
 OTA_PORT ?= 3232
 OTA_PASSWORD ?=
-OTA_BINARY := .esphome/build/gato-dorado-2e90/build/firmware.ota.bin
+OTA_BINARY := .esphome/build/gato-dorado/build/firmware.ota.bin
 
 .PHONY: tools ota-tools secrets sounds config compile flash ota logs clean
 
@@ -54,6 +54,7 @@ flash: compile
 	$(ESPHOME) upload motion-sound.yaml --device "$(PORT)"
 
 ota: compile ota-tools
+	@test -n "$(OTA_HOST)" || { echo "Set OTA_HOST to the device IP or mDNS name, e.g. make ota OTA_HOST=gato-dorado-98d3d0.local" >&2; exit 2; }
 	$(OTA_PYTHON) -c 'import logging, sys; from esphome.espota2 import run_ota; logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s"); sys.exit(run_ota(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]))' \
 		"$(OTA_HOST)" "$(OTA_PORT)" "$(OTA_PASSWORD)" "$(OTA_BINARY)"
 
