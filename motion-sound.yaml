@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.11"
+  firmware_version: "0.1.17"
 
   # Duration of each beckon sweep segment (center-front, front-back, back-center)
   # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
@@ -26,6 +26,10 @@ substitutions:
   # Each meow clip has weight 1. A ratio equal to the number of meows makes the
   # purr as common as all meows together. A ratio of 0 plays only meows.
   purr_ratio: "0"
+
+  # Password of the fallback hotspot, which starts when the saved Wi-Fi network
+  # cannot be reached. It must be at least 8 characters.
+  fallback_ap_password: "GatoDoradoGrande"
 
   # Boot clip. "beep" plays the beep. "win_startup" plays the Windows startup sound.
   boot_sound: win_startup
@@ -58,6 +62,14 @@ esp32:
     type: esp-idf
 
 wifi:
+  # When the saved network is unreachable for 1 minute, start a hotspot named
+  # after the device. Join it from a phone or laptop; the captive portal opens a
+  # page to choose a Wi-Fi network, and OTA and the API also work over it.
+  ap:
+    password: "${fallback_ap_password}"
+    ap_timeout: 1min
+
+captive_portal:
 
 api:
 
@@ -207,6 +219,8 @@ audio_file:
     file: .cache/sounds/win_startup.mp3
   - id: growl
     file: .cache/sounds/growl.mp3
+  - id: hola
+    file: .cache/sounds/hola.mp3
   - id: purring
     file: .cache/sounds/purring.mp3
 
@@ -381,7 +395,8 @@ script:
               "audio-file://meow_youtube_dc_24",
               "audio-file://meow_youtube_dc_34",
               "audio-file://meow_youtube_dc_42",
-              "audio-file://meow_youtube_dc_52"
+              "audio-file://meow_youtube_dc_52",
+              "audio-file://hola"
             };
             constexpr uint32_t meow_count = sizeof(MEOWS) / sizeof(MEOWS[0]);
             id(last_meow_ms) = millis();
@@ -598,3 +613,10 @@ button:
     on_press:
       - script.execute: play_random_meow
       - script.execute: start_arm_sweep
+  - platform: template
+    id: hola_button
+    name: "Hola"
+    on_press:
+      - script.execute:
+          id: play_cue
+          url: "audio-file://hola"

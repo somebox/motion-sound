@@ -244,6 +244,7 @@ SFX_SOURCES = (
     ("beep", "beep.wav"),
     ("three_beeps", "3beeps.wav"),
     ("growl", "growl.wav"),
+    ("hola", "hola.wav"),
     ("purring", "purring.wav"),
     ("win_startup", "win-startup.wav"),
 )
