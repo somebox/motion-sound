@@ -7,3 +7,4 @@ secrets.yaml
 __pycache__/
 *.py[cod]
 *.un~
+media/sfx/.DS_Store

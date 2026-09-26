@@ -244,6 +244,8 @@ def prepare_sfx(sfx_dir: Path, cache_dir: Path) -> None:
         ("beep", "beep.wav"),
         ("three_beeps", "3beeps.wav"),
         ("growl", "growl.wav"),
+        ("purring", "purring.wav"),
+        ("win_startup", "win-startup.wav"),
     )
     for audio_id, filename in sources:
         source = sfx_dir / filename
