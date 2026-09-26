@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.17"
+  firmware_version: "0.1.18"
 
   # Duration of each beckon sweep segment (center-front, front-back, back-center)
   # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
@@ -26,10 +26,6 @@ substitutions:
   # Each meow clip has weight 1. A ratio equal to the number of meows makes the
   # purr as common as all meows together. A ratio of 0 plays only meows.
   purr_ratio: "0"
-
-  # Password of the fallback hotspot, which starts when the saved Wi-Fi network
-  # cannot be reached. It must be at least 8 characters.
-  fallback_ap_password: "GatoDoradoGrande"
 
   # Boot clip. "beep" plays the beep. "win_startup" plays the Windows startup sound.
   boot_sound: win_startup
@@ -66,7 +62,8 @@ wifi:
   # after the device. Join it from a phone or laptop; the captive portal opens a
   # page to choose a Wi-Fi network, and OTA and the API also work over it.
   ap:
-    password: "${fallback_ap_password}"
+    # Set in the gitignored secrets.yaml; see secrets.example.yaml.
+    password: !secret fallback_ap_password
     ap_timeout: 1min
 
 captive_portal:

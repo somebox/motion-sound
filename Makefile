@@ -18,7 +18,7 @@ OTA_PORT ?= 3232
 OTA_PASSWORD ?=
 OTA_BINARY := .esphome/build/gato-dorado-2e90/build/firmware.ota.bin
 
-.PHONY: tools ota-tools sounds config compile flash ota logs clean
+.PHONY: tools ota-tools secrets sounds config compile flash ota logs clean
 
 tools: $(ESPHOME_STAMP)
 
@@ -37,13 +37,16 @@ $(OTA_ESPHOME_STAMP): requirements-ota.txt
 	$(OTA_VENV_DIR)/bin/python -m pip install --requirement requirements-ota.txt
 	@touch "$@"
 
+secrets:
+	@test -f secrets.yaml || { echo "secrets.yaml is missing. Copy secrets.example.yaml to secrets.yaml and set fallback_ap_password." >&2; exit 2; }
+
 sounds: tools
 	$(VENV_DIR)/bin/python scripts/prepare_sounds.py --manifest sounds/sources.txt --cache-dir .cache/sounds
 
-config: tools sounds
+config: tools secrets sounds
 	$(ESPHOME) config motion-sound.yaml
 
-compile: tools sounds
+compile: tools secrets sounds
 	$(ESPHOME) compile motion-sound.yaml
 
 flash: compile
@@ -54,7 +57,7 @@ ota: compile ota-tools
 	$(OTA_PYTHON) -c 'import logging, sys; from esphome.espota2 import run_ota; logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s"); sys.exit(run_ota(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]))' \
 		"$(OTA_HOST)" "$(OTA_PORT)" "$(OTA_PASSWORD)" "$(OTA_BINARY)"
 
-logs: tools sounds
+logs: tools secrets sounds
 	@test -n "$(PORT)" || { echo "Set PORT to the ESP32 serial device, e.g. make logs PORT=/dev/cu.usbserial-XXXX" >&2; exit 2; }
 	$(ESPHOME) logs motion-sound.yaml --device "$(PORT)"
 

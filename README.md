@@ -25,7 +25,7 @@ On each motion rising edge, and on a short button press, the servo eases from ce
 
 Home Assistant gets these buttons: **Animate Arm** (arm sweep only), **Meow** (random meow only), and **Meow and Arm** (both). A **Hola** button plays only the hola clip, for debugging. These manual actions ignore mute and the meow rate limit; the arm sweep is still skipped if the arm is already moving.
 
-If the saved Wi-Fi network can't be reached for 1 minute, the device starts a fallback hotspot named after the device (for example `gato-dorado-2e90`), protected by the `fallback_ap_password` substitution at the top of `motion-sound.yaml`. Join it from a phone or laptop: the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. OTA and the Home Assistant API also work over the hotspot. The device keeps retrying the saved network while the hotspot is up.
+If the saved Wi-Fi network can't be reached for 1 minute, the device starts a fallback hotspot named after the device (for example `gato-dorado-2e90`), protected by `fallback_ap_password` in `secrets.yaml`. That file is gitignored: copy [`secrets.example.yaml`](secrets.example.yaml) to `secrets.yaml` and set your own password (at least 8 characters) before building; the Makefile stops with a message if it is missing. Join it from a phone or laptop: the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. OTA and the Home Assistant API also work over the hotspot. The device keeps retrying the saved network while the hotspot is up.
 
 The **Mute** switch shows and sets the same sound mute as the 3–6 second button hold, with the same beep cues; it follows button changes too.
 
