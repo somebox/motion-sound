@@ -6,7 +6,8 @@ Manifest format (one entry per line):
 
 Original downloads and normalized outputs live in the gitignored cache. The
 original WAV files are retained there so each build normalizes from pristine
-source data instead of applying gain repeatedly.
+source data instead of applying gain repeatedly. Each normalized WAV is then
+encoded to a mono MP3, which is what the firmware embeds.
 """
 
 import argparse
@@ -22,6 +23,7 @@ from urllib.request import Request, urlopen
 import wave
 
 SAMPLE_RATE = 16_000
+MP3_BITRATE_KBPS = 32
 TARGET_PEAK_DBFS = -1.0
 TARGET_PEAK = round(32768 * 10 ** (TARGET_PEAK_DBFS / 20))
 MAX_AUDIO_FILE_BYTES = 5 * 1024 * 1024
@@ -238,16 +240,18 @@ def resample(samples: list[int], source_rate: int, target_rate: int) -> list[int
     return output
 
 
+SFX_SOURCES = (
+    ("beep", "beep.wav"),
+    ("three_beeps", "3beeps.wav"),
+    ("growl", "growl.wav"),
+    ("purring", "purring.wav"),
+    ("win_startup", "win-startup.wav"),
+)
+
+
 def prepare_sfx(sfx_dir: Path, cache_dir: Path) -> None:
-    """Convert local cue clips to the mono 16 kHz WAVs embedded in firmware."""
-    sources = (
-        ("beep", "beep.wav"),
-        ("three_beeps", "3beeps.wav"),
-        ("growl", "growl.wav"),
-        ("purring", "purring.wav"),
-        ("win_startup", "win-startup.wav"),
-    )
-    for audio_id, filename in sources:
+    """Convert local cue clips to normalized mono 16 kHz WAVs."""
+    for audio_id, filename in SFX_SOURCES:
         source = sfx_dir / filename
         samples, rate = read_pcm(source)
         converted = resample(samples, rate, SAMPLE_RATE)
@@ -267,6 +271,23 @@ def prepare_sfx(sfx_dir: Path, cache_dir: Path) -> None:
             temp_path.unlink(missing_ok=True)
 
 
+def encode_mp3(wav_path: Path) -> None:
+    """Encode a normalized mono 16 kHz WAV next to it as <name>.mp3."""
+    import lameenc
+
+    with wave.open(str(wav_path), "rb") as wav:
+        pcm = wav.readframes(wav.getnframes())
+    encoder = lameenc.Encoder()
+    encoder.set_bit_rate(MP3_BITRATE_KBPS)
+    encoder.set_in_sample_rate(SAMPLE_RATE)
+    encoder.set_channels(1)
+    encoder.set_quality(2)
+    data = bytes(encoder.encode(pcm) + encoder.flush())
+    mp3_path = wav_path.with_suffix(".mp3")
+    atomic_write(mp3_path, data)
+    print(f"Encoded {mp3_path}: {len(data)} bytes ({MP3_BITRATE_KBPS} kbps)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=Path("sounds/sources.txt"))
@@ -282,6 +303,8 @@ def main() -> None:
             source = download_source(audio_id, url, download_dir)
             normalize(source, args.cache_dir / f"{audio_id}.wav")
         prepare_sfx(args.sfx_dir, args.cache_dir)
+        for audio_id in [entry[0] for entry in entries] + [s[0] for s in SFX_SOURCES]:
+            encode_mp3(args.cache_dir / f"{audio_id}.wav")
     except (OSError, ValueError, wave.Error) as err:
         parser.exit(1, f"prepare_sounds.py: error: {err}\n")
 

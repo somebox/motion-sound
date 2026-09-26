@@ -1,14 +1,15 @@
-# Behavior settings. Times used by the arm are ESPHome durations; the sound
+# Behavior settings. Arm segment times are milliseconds at Arm Speed 5; the sound
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.1"
+  firmware_version: "0.1.11"
 
-  # Pause between arm positions during a beckon sweep.
-  step_time: 25ms
+  # Duration of each beckon sweep segment (center-front, front-back, back-center)
+  # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
+  sweep_segment_ms: "2000"
 
-  # Pause between arm positions during a growl wiggle.
-  wiggle_step_time: 25ms
+  # Duration of each growl wiggle quarter at Arm Speed 5, scaled the same way.
+  wiggle_segment_ms: "375"
 
   # Meows play on every trigger until this many triggers occur in one window.
   # The next trigger slows meows to sound_min_interval_ms. The arm still moves.
@@ -22,11 +23,11 @@ substitutions:
   sound_min_interval_ms: "30000"
 
   # How many times more often the purr is chosen than any one meow clip.
-  # The four meows each have weight 1. A ratio of 4 makes the purr as common
-  # as all four meows together. A ratio of 0 plays only meows.
+  # Each meow clip has weight 1. A ratio equal to the number of meows makes the
+  # purr as common as all meows together. A ratio of 0 plays only meows.
   purr_ratio: "0"
 
-  # Boot clip. "beep" plays beep.wav. "win_startup" plays win-startup.wav.
+  # Boot clip. "beep" plays the beep. "win_startup" plays the Windows startup sound.
   boot_sound: win_startup
 
   # Wiring. These are the GPIOs used below.
@@ -44,9 +45,11 @@ esphome:
     priority: -100
     then:
       - logger.log: "Firmware version ${firmware_version}"
-      - script.execute:
-          id: play_cue
-          url: "audio-file://${boot_sound}"
+      # Attach and hold center now so the first sweep starts from a known position.
+      - servo.write:
+          id: cat_arm_servo
+          level: 0
+      - script.execute: play_startup_sequence
 
 esp32:
   board: esp32dev
@@ -96,10 +99,6 @@ servo:
     max_level: 12.5%
 
 globals:
-  - id: random_sound_index
-    type: uint8_t
-    restore_value: no
-    initial_value: "0"
   - id: sound_muted
     type: bool
     restore_value: yes
@@ -128,27 +127,88 @@ globals:
     type: bool
     restore_value: no
     initial_value: "true"
+  - id: move_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: move_duration_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "1"
+  # Arm Speed multiplier for movement durations; 1.0 at speed 5.
+  - id: arm_speed_factor
+    type: float
+    restore_value: no
+    initial_value: "1.0"
+  # Arm mutex: set while a sweep or wiggle owns the servo.
+  - id: arm_busy
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
-# These WAV files are embedded in firmware flash and exposed via audio-file://.
+# These MP3 files are built by `make sounds`, embedded in firmware flash and
+# exposed via audio-file://.
 audio_file:
   - id: meow_youtube_04
-    file: .cache/sounds/meow_youtube_04.wav
+    file: .cache/sounds/meow_youtube_04.mp3
   - id: meow_youtube_27
-    file: .cache/sounds/meow_youtube_27.wav
+    file: .cache/sounds/meow_youtube_27.mp3
   - id: meow_kaggle_36_0
-    file: .cache/sounds/meow_kaggle_36_0.wav
+    file: .cache/sounds/meow_kaggle_36_0.mp3
   - id: meow_kaggle_31_13
-    file: .cache/sounds/meow_kaggle_31_13.wav
+    file: .cache/sounds/meow_kaggle_31_13.mp3
+  - id: meow_kaggle_14_2
+    file: .cache/sounds/meow_kaggle_14_2.mp3
+  - id: meow_kaggle_18_0
+    file: .cache/sounds/meow_kaggle_18_0.mp3
+  - id: meow_kaggle_20_0
+    file: .cache/sounds/meow_kaggle_20_0.mp3
+  - id: meow_kaggle_23_2
+    file: .cache/sounds/meow_kaggle_23_2.mp3
+  - id: meow_kaggle_23_4
+    file: .cache/sounds/meow_kaggle_23_4.mp3
+  - id: meow_kaggle_29_6
+    file: .cache/sounds/meow_kaggle_29_6.mp3
+  - id: meow_kaggle_34_2
+    file: .cache/sounds/meow_kaggle_34_2.mp3
+  - id: meow_kaggle_39_0
+    file: .cache/sounds/meow_kaggle_39_0.mp3
+  - id: meow_kaggle_42_0
+    file: .cache/sounds/meow_kaggle_42_0.mp3
+  - id: meow_kaggle_42_1
+    file: .cache/sounds/meow_kaggle_42_1.mp3
+  - id: meow_kaggle_46_4
+    file: .cache/sounds/meow_kaggle_46_4.mp3
+  - id: meow_kaggle_47_1
+    file: .cache/sounds/meow_kaggle_47_1.mp3
+  - id: meow_kaggle_48_0
+    file: .cache/sounds/meow_kaggle_48_0.mp3
+  - id: meow_kaggle_52_0
+    file: .cache/sounds/meow_kaggle_52_0.mp3
+  - id: meow_kaggle_57_2
+    file: .cache/sounds/meow_kaggle_57_2.mp3
+  - id: meow_kaggle_58_1
+    file: .cache/sounds/meow_kaggle_58_1.mp3
+  - id: meow_youtube_dc_22
+    file: .cache/sounds/meow_youtube_dc_22.mp3
+  - id: meow_youtube_dc_24
+    file: .cache/sounds/meow_youtube_dc_24.mp3
+  - id: meow_youtube_dc_34
+    file: .cache/sounds/meow_youtube_dc_34.mp3
+  - id: meow_youtube_dc_42
+    file: .cache/sounds/meow_youtube_dc_42.mp3
+  - id: meow_youtube_dc_52
+    file: .cache/sounds/meow_youtube_dc_52.mp3
   - id: beep
-    file: .cache/sounds/beep.wav
+    file: .cache/sounds/beep.mp3
   - id: three_beeps
-    file: .cache/sounds/three_beeps.wav
+    file: .cache/sounds/three_beeps.mp3
   - id: win_startup
-    file: .cache/sounds/win_startup.wav
+    file: .cache/sounds/win_startup.mp3
   - id: growl
-    file: .cache/sounds/growl.wav
+    file: .cache/sounds/growl.mp3
   - id: purring
-    file: .cache/sounds/purring.wav
+    file: .cache/sounds/purring.mp3
 
 media_source:
   - platform: audio_file
@@ -162,11 +222,30 @@ media_player:
       speaker: max98357_speaker
       sources:
         - local_audio_files
-      format: WAV
+      format: MP3
       sample_rate: 16000
       num_channels: 1
 
 script:
+  - id: play_startup_sequence
+    mode: single
+    then:
+      - script.execute:
+          id: play_cue
+          url: "audio-file://${boot_sound}"
+      - script.wait: play_cue
+      - wait_until:
+          condition:
+            media_player.is_announcing:
+              id: motion_audio_player
+          timeout: 5s
+      - wait_until:
+          condition:
+            media_player.is_idle:
+              id: motion_audio_player
+          timeout: 15s
+      - logger.log: "Startup cue finished; running the arm and meow sequence"
+      - script.execute: play_motion_sequence
   - id: mark_arm_segment
     parameters:
       end_name: string
@@ -186,19 +265,24 @@ script:
           if (slash != std::string::npos) {
             name = name.substr(slash + 1);
           }
-          std::string file = name + ".wav";
-          if (name == "three_beeps") {
-            file = "3beeps.wav";
-          } else if (name == "win_startup") {
-            file = "win-startup.wav";
-          }
-          ESP_LOGI("motion_sound", "Playing %s", file.c_str());
+          ESP_LOGI("motion_sound", "Playing %s", name.c_str());
       - media_player.play_media:
           id: motion_audio_player
           media_url: !lambda return url;
           announcement: true
+  - id: start_arm_sweep
+    mode: parallel
+    then:
+      - if:
+          condition:
+            lambda: return id(arm_busy);
+          then:
+            - logger.log: "Arm busy; skipping movement"
+          else:
+            - lambda: id(arm_busy) = true;
+            - script.execute: sweep_servo
   - id: play_motion_sequence
-    mode: single
+    mode: parallel
     then:
       - lambda: |-
           const uint32_t now = millis();
@@ -223,14 +307,14 @@ script:
           }
           id(allow_meow) = allow;
           if (!allow && !id(sound_muted)) {
-            ESP_LOGI("motion_sound", "Skipping meow; arm still moves");
+            ESP_LOGI("motion_sound", "Skipping meow; rate limited");
           }
       - if:
           condition:
             lambda: return id(allow_meow);
           then:
             - script.execute: play_random_meow
-      - script.execute: sweep_servo
+      - script.execute: start_arm_sweep
   - id: toggle_sound_mute
     mode: single
     then:
@@ -254,7 +338,10 @@ script:
   - id: growl_wiggle
     mode: single
     then:
-      - script.wait: sweep_servo
+      - wait_until:
+          condition:
+            lambda: return !id(arm_busy);
+      - lambda: id(arm_busy) = true;
       - media_player.stop:
           id: motion_audio_player
       - delay: 50ms
@@ -266,164 +353,136 @@ script:
   - id: play_random_meow
     mode: restart
     then:
+      - script.execute:
+          id: play_cue
+          url: !lambda |-
+            static const char *const MEOWS[] = {
+              "audio-file://meow_youtube_04",
+              "audio-file://meow_youtube_27",
+              "audio-file://meow_kaggle_36_0",
+              "audio-file://meow_kaggle_31_13",
+              "audio-file://meow_kaggle_14_2",
+              "audio-file://meow_kaggle_18_0",
+              "audio-file://meow_kaggle_20_0",
+              "audio-file://meow_kaggle_23_2",
+              "audio-file://meow_kaggle_23_4",
+              "audio-file://meow_kaggle_29_6",
+              "audio-file://meow_kaggle_34_2",
+              "audio-file://meow_kaggle_39_0",
+              "audio-file://meow_kaggle_42_0",
+              "audio-file://meow_kaggle_42_1",
+              "audio-file://meow_kaggle_46_4",
+              "audio-file://meow_kaggle_47_1",
+              "audio-file://meow_kaggle_48_0",
+              "audio-file://meow_kaggle_52_0",
+              "audio-file://meow_kaggle_57_2",
+              "audio-file://meow_kaggle_58_1",
+              "audio-file://meow_youtube_dc_22",
+              "audio-file://meow_youtube_dc_24",
+              "audio-file://meow_youtube_dc_34",
+              "audio-file://meow_youtube_dc_42",
+              "audio-file://meow_youtube_dc_52"
+            };
+            constexpr uint32_t meow_count = sizeof(MEOWS) / sizeof(MEOWS[0]);
+            id(last_meow_ms) = millis();
+            const uint32_t purr_weight = ${purr_ratio};
+            const uint32_t pick = random_uint32() % (meow_count + purr_weight);
+            if (pick < purr_weight) {
+              return std::string("audio-file://purring");
+            }
+            return std::string(MEOWS[pick - purr_weight]);
+  # Eases the arm between two levels. The duration is base_ms scaled by Arm Speed;
+  # the position comes from elapsed time, so speed is not limited by the loop rate.
+  - id: move_arm
+    mode: single
+    parameters:
+      from_level: float
+      to_level: float
+      base_ms: int
+      end_name: string
+    then:
       - lambda: |-
-          id(last_meow_ms) = millis();
-          const uint32_t purr_weight = ${purr_ratio};
-          const uint32_t pick = random_uint32() % (4u + purr_weight);
-          if (pick < purr_weight) {
-            id(random_sound_index) = 4;
-          } else {
-            id(random_sound_index) = pick - purr_weight;
-          }
-      - if:
+          id(move_started_ms) = millis();
+          id(move_duration_ms) = std::max<uint32_t>(1, static_cast<uint32_t>(base_ms * id(arm_speed_factor) + 0.5f));
+      - while:
           condition:
-            lambda: return id(random_sound_index) == 0;
+            lambda: return millis() - id(move_started_ms) < id(move_duration_ms);
           then:
-            - script.execute:
-                id: play_cue
-                url: "audio-file://meow_youtube_04"
-      - if:
-          condition:
-            lambda: return id(random_sound_index) == 1;
-          then:
-            - script.execute:
-                id: play_cue
-                url: "audio-file://meow_youtube_27"
-      - if:
-          condition:
-            lambda: return id(random_sound_index) == 2;
-          then:
-            - script.execute:
-                id: play_cue
-                url: "audio-file://meow_kaggle_36_0"
-      - if:
-          condition:
-            lambda: return id(random_sound_index) == 3;
-          then:
-            - script.execute:
-                id: play_cue
-                url: "audio-file://meow_kaggle_31_13"
-      - if:
-          condition:
-            lambda: return id(random_sound_index) == 4;
-          then:
-            - script.execute:
-                id: play_cue
-                url: "audio-file://purring"
+            - servo.write:
+                id: cat_arm_servo
+                level: !lambda |-
+                  float progress = (millis() - id(move_started_ms)) / static_cast<float>(id(move_duration_ms));
+                  if (progress > 1.0f) {
+                    progress = 1.0f;
+                  }
+                  const float eased = progress * progress * (3.0f - 2.0f * progress);
+                  return from_level + (to_level - from_level) * eased;
+            - delay: 20ms
+      - servo.write:
+          id: cat_arm_servo
+          level: !lambda return to_level;
+      - script.execute:
+          id: mark_arm_segment
+          end_name: !lambda return end_name;
+  # Only start via start_arm_sweep, which claims arm_busy.
   - id: sweep_servo
     mode: single
     then:
-      - script.wait: wiggle_arm
       - lambda: id(arm_segment_started_ms) = millis();
-      - repeat:
-          count: 81
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 80.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return -0.2222f * eased;
-            - delay: ${step_time}
       - script.execute:
-          id: mark_arm_segment
-          end_name: "sweep negative end"
-      - repeat:
-          count: 81
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 80.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return -0.2222f + 0.4444f * eased;
-            - delay: ${step_time}
+          id: move_arm
+          from_level: 0.0
+          to_level: 0.2222
+          base_ms: ${sweep_segment_ms}
+          end_name: "sweep front end"
+      - script.wait: move_arm
       - script.execute:
-          id: mark_arm_segment
-          end_name: "sweep positive end"
-      - repeat:
-          count: 81
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 80.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return 0.2222f - 0.4444f * eased;
-            - delay: ${step_time}
+          id: move_arm
+          from_level: 0.2222
+          to_level: -0.2222
+          base_ms: ${sweep_segment_ms}
+          end_name: "sweep back end"
+      - script.wait: move_arm
       - script.execute:
-          id: mark_arm_segment
-          end_name: "sweep negative end"
-      - repeat:
-          count: 81
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 80.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return -0.2222f * (1.0f - eased);
-            - delay: ${step_time}
-      - script.execute:
-          id: mark_arm_segment
+          id: move_arm
+          from_level: -0.2222
+          to_level: 0.0
+          base_ms: ${sweep_segment_ms}
           end_name: "sweep center"
-      - delay: 300ms
-      - servo.detach: cat_arm_servo
+      - script.wait: move_arm
+      # Keep holding center; a detached arm drifts and snaps back on the next sweep.
+      - lambda: id(arm_busy) = false;
   - id: wiggle_cycle
     mode: restart
     then:
-      - repeat:
-          count: 15
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 14.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return 0.074f * eased;
-            - delay: ${wiggle_step_time}
       - script.execute:
-          id: mark_arm_segment
+          id: move_arm
+          from_level: 0.0
+          to_level: 0.074
+          base_ms: ${wiggle_segment_ms}
           end_name: "wiggle positive end"
-      - repeat:
-          count: 15
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 14.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return 0.074f * (1.0f - eased);
-            - delay: ${wiggle_step_time}
+      - script.wait: move_arm
       - script.execute:
-          id: mark_arm_segment
+          id: move_arm
+          from_level: 0.074
+          to_level: 0.0
+          base_ms: ${wiggle_segment_ms}
           end_name: "wiggle center"
-      - repeat:
-          count: 15
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 14.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return -0.074f * eased;
-            - delay: ${wiggle_step_time}
+      - script.wait: move_arm
       - script.execute:
-          id: mark_arm_segment
+          id: move_arm
+          from_level: 0.0
+          to_level: -0.074
+          base_ms: ${wiggle_segment_ms}
           end_name: "wiggle negative end"
-      - repeat:
-          count: 15
-          then:
-            - servo.write:
-                id: cat_arm_servo
-                level: !lambda |-
-                  const float progress = iteration / 14.0f;
-                  const float eased = progress * progress * (3.0f - 2.0f * progress);
-                  return -0.074f * (1.0f - eased);
-            - delay: ${wiggle_step_time}
+      - script.wait: move_arm
       - script.execute:
-          id: mark_arm_segment
+          id: move_arm
+          from_level: -0.074
+          to_level: 0.0
+          base_ms: ${wiggle_segment_ms}
           end_name: "wiggle center"
+      - script.wait: move_arm
   - id: wiggle_arm
     mode: restart
     then:
@@ -435,8 +494,7 @@ script:
           then:
             - script.execute: wiggle_cycle
             - script.wait: wiggle_cycle
-      - delay: 100ms
-      - servo.detach: cat_arm_servo
+      - lambda: id(arm_busy) = false;
 
 binary_sensor:
   - platform: gpio
@@ -449,9 +507,8 @@ binary_sensor:
         input: true
     on_press:
       then:
-        - logger.log: "Motion detected; choosing a random embedded meow"
-        - script.execute: play_random_meow
-        - script.execute: sweep_servo
+        - logger.log: "Motion detected"
+        - script.execute: play_motion_sequence
   - platform: gpio
     id: control_button
     name: "Button"
@@ -482,13 +539,62 @@ binary_sensor:
           - OFF for at least 50ms
         invalid_cooldown: 0s
         then:
-          - logger.log: "Short press; playing sound and moving the arm"
-          - script.execute: play_random_meow
-          - script.execute: sweep_servo
+          - logger.log: "Short press"
+          - script.execute: play_motion_sequence
+
+number:
+  - platform: template
+    id: arm_speed
+    name: "Arm Speed"
+    icon: mdi:speedometer
+    min_value: 0
+    max_value: 10
+    step: 1
+    initial_value: 7
+    restore_value: true
+    optimistic: true
+    mode: slider
+    on_value:
+      - lambda: |-
+          const float speed = std::isnan(x) ? 7.0f : x;
+          // 0 matches the old speed 3 (2^0.8 = 1.74x longer); 10 is 8x faster than 5.
+          id(arm_speed_factor) = speed <= 5.0f ? powf(1.7411f, (5.0f - speed) / 5.0f)
+                                               : powf(0.125f, (speed - 5.0f) / 5.0f);
+          ESP_LOGI("motion_sound", "Arm speed %.0f (duration x%.2f)", speed, id(arm_speed_factor));
+
+switch:
+  - platform: template
+    id: mute_switch
+    name: "Mute"
+    icon: mdi:volume-off
+    lambda: return id(sound_muted);
+    turn_on_action:
+      - if:
+          condition:
+            lambda: return !id(sound_muted);
+          then:
+            - script.execute: toggle_sound_mute
+    turn_off_action:
+      - if:
+          condition:
+            lambda: return id(sound_muted);
+          then:
+            - script.execute: toggle_sound_mute
 
 button:
   - platform: template
     id: animate_arm_button
     name: "Animate Arm"
     on_press:
-      - script.execute: sweep_servo
+      - script.execute: start_arm_sweep
+  - platform: template
+    id: meow_button
+    name: "Meow"
+    on_press:
+      - script.execute: play_random_meow
+  - platform: template
+    id: meow_and_arm_button
+    name: "Meow and Arm"
+    on_press:
+      - script.execute: play_random_meow
+      - script.execute: start_arm_sweep

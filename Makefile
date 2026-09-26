@@ -1,6 +1,5 @@
 .DEFAULT_GOAL := compile
 
-PYTHON ?= python3
 BOOTSTRAP_PYTHON ?= $(shell for python in python3.14 python3.13 python3.12 python3; do \
 	if command -v "$$python" >/dev/null 2>&1 && \
 		"$$python" -c 'import sys; raise SystemExit(sys.version_info < (3, 12))' >/dev/null 2>&1; then \
@@ -38,8 +37,8 @@ $(OTA_ESPHOME_STAMP): requirements-ota.txt
 	$(OTA_VENV_DIR)/bin/python -m pip install --requirement requirements-ota.txt
 	@touch "$@"
 
-sounds:
-	$(PYTHON) scripts/prepare_sounds.py --manifest sounds/sources.txt --cache-dir .cache/sounds
+sounds: tools
+	$(VENV_DIR)/bin/python scripts/prepare_sounds.py --manifest sounds/sources.txt --cache-dir .cache/sounds
 
 config: tools sounds
 	$(ESPHOME) config motion-sound.yaml
