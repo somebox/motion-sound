@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.21"
+  firmware_version: "0.1.22"
 
   # Duration of each beckon sweep segment (center-front, front-back, back-center)
   # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
@@ -588,6 +588,9 @@ switch:
     id: mute_switch
     name: "Mute"
     icon: mdi:volume-off
+    # The saved sound_muted global is the source of truth. Any other restore mode
+    # would run turn_off_action at boot and clear a saved mute.
+    restore_mode: DISABLED
     lambda: return id(sound_muted);
     turn_on_action:
       - if:
