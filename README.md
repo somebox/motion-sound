@@ -1,43 +1,80 @@
 # Motion Sound
 
-An example project for building a standalone ESPHome sound-effects (SFX) device, used to make an interactive object that plays a sound and moves something when motion is detected. An ESP32-WROOM DevKit V1 reads a binary presence/motion sensor and randomly plays a short meow stored in firmware flash as MP3 through a MAX98357 I²S amplifier. A servo on the cat arm does one eased sweep and then holds center when motion is detected. Detection, random selection, and playback run locally on the device; Wi-Fi and Home Assistant are not required.
+An example project for building a standalone ESPHome sound-effects (SFX) device, used to make an interactive object that plays a sound and moves something when motion is detected. An ESP32-WROOM DevKit V1 reads a binary presence/motion sensor, plays a random short meow stored in firmware flash as MP3 through a MAX98357 I²S amplifier, and sweeps a servo-driven cat arm once before holding it at center. Detection, random selection, and playback run locally on the device. Wi-Fi and Home Assistant add remote controls and OTA updates, but are not required.
 
 ![Three prototype builds on perfboard: ESP32 DevKit V1 boards with MAX98357A amplifiers, an RCWL-0516 sensor, and a speaker](media/boards.jpg)
 
 ## Hardware and wiring
 
-![Wiring diagram: ESP32 DevKit V1 connected to an RCWL-0516 motion sensor, MAX98357A I²S amplifier and speaker, SG90 servo, and push button](media/wiring-diagram.png)
+![Wiring diagram: ESP32 DevKit V1 connected to an RCWL-0516 motion sensor, MAX98357A I²S amplifier and speaker, push button, and an HDKJ D3615 servo on its own 5–6 V supply](media/wiring-diagram.png)
 
-The diagram draws every part at the same scale (wire lengths are not to scale). It takes 5 V for the servo, sensor, and amplifier from the ESP32 VIN pin, which carries USB 5 V.
+The diagram draws every part at the same scale (wire lengths are not to scale). The ESP32 runs from USB 5 V, and the motion sensor and amplifier take 5 V from its VIN pin. The servo has its own supply, and that supply's negative terminal is tied to ESP32 GND.
 
 | Signal | ESP32 GPIO | Connect to |
 | --- | ---: | --- |
-| Motion sensor output | GPIO33 | Binary sensor output |
+| Motion sensor output | GPIO33 | RCWL-0516 OUT |
 | Button | GPIO32 | Momentary switch to GND (internal pull-up) |
-| Servo signal | GPIO13 | Servo PWM, 50 Hz |
+| Servo signal | GPIO13 | Servo signal wire (orange on most servos), 50 Hz PWM |
 | I²S data out (DIN) | GPIO15 | MAX98357 DIN |
 | I²S word select (LRCLK/WS) | GPIO22 | MAX98357 LRCLK |
 | I²S bit clock (BCLK) | GPIO19 | MAX98357 BCLK |
-| Amplifier power and ground | — | 2.5–5.5 V at VIN; share GND with ESP32 |
+| Sensor and amplifier power | VIN (5 V), GND | RCWL-0516 VIN/GND and MAX98357 VIN/GND |
+| Servo power | GND | Separate 5–6 V DC supply rated for at least 3 A to servo + and −; also connect supply − to ESP32 GND |
 | Speaker output | — | Connect a 4 Ω+ speaker across the amplifier outputs; do not ground either output |
 
-On each motion rising edge, and on a short button press, the servo eases from center to the front, sweeps once to the back, eases back to center, and keeps holding center. The servo stays attached between activations: a detached arm drifts, and the next sweep would snap it back to center at full speed. At boot the arm is centered immediately. The arm has a mutex: while a sweep or growl wiggle is running, new triggers do not start another movement, but every trigger still plays a new meow (unless muted or rate limited). Releasing the button after 3 seconds and before 6 seconds toggles sound mute: `beep.wav` plays when mute turns on, and `3beeps.wav` plays when it turns off. Holding past 6 seconds plays `growl.wav` and wiggles the arm for about 2 seconds over a shorter arc at about 3× the sweep step rate, and does not change mute. Boot plays the clip named by `boot_sound`: `win-startup.wav` as configured, or `beep.wav` when it is set to `beep`; after that cue finishes, the normal meow and arm sequence runs once. Mute is kept across reboot, so the startup arm movement still runs when muted but its meow is suppressed; cue sounds play even while meows are muted. Power the servo from a supply that can handle its stall current, and share ground with the ESP32. Do not power the servo from the ESP32 3.3 V pin.
+The arm uses an HDKJ D3615: a standard-size (40 × 20 × 40.5 mm, 56 g) digital metal-gear servo rated for 4.8–7.2 V, with 14 kg·cm of torque at 6 V and 15 kg·cm at 7.2 V. Its stall current is not published, but servos in this class draw 2–3 A when stalled, which is more than USB and the ESP32 VIN pin can supply. Power it from its own 5–6 V supply rated for at least 3 A, and connect the supply's negative terminal to ESP32 GND so the GPIO13 signal has a common reference. Do not power the servo from VIN or the 3.3 V pin. The firmware keeps the servo attached at center between movements, so it holds position whenever the device is on.
 
-Home Assistant gets these buttons: **Animate Arm** (arm sweep only), **Meow** (random meow only), and **Meow and Arm** (both). A **Hola** button plays only the hola clip, for debugging. These manual actions ignore mute and the meow rate limit; the arm sweep is still skipped if the arm is already moving.
+Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. The RCWL-0516 takes 4–28 V at VIN and drives OUT at 3.3 V, so it can connect to GPIO33 directly; leave its 3V3 and CDS pins unconnected. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
 
-Two diagnostic sensors help track stability: **Uptime** (seconds since boot, updated every minute) and **Last Reset Reason** (for example power-on, `software via esp_restart` after an OTA update, task or interrupt watchdog, brownout, or a crash/panic). Home Assistant lists them in the device's Diagnostic section.
+For amplifier pinout details, see [Adafruit's MAX98357 pinout guide](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pinouts). The MAX98357 takes digital I²S (not analog audio), and MCLK is not required. Leave SD and GAIN unconnected for mono (L+R)/2 output at 9 dB gain. Its speaker outputs are bridge-tied/floating: use a 4 Ω or higher moving-coil speaker across the output pair, and do not connect either speaker terminal to ground. The amp supply range is 2.5–5.5 V; Adafruit recommends 5 V for higher output power with a supply sized for the speaker load. ESP32 3.3 V logic is compatible with the I²S inputs. Follow the markings/specifications for the specific amplifier breakout in use.
 
-The player volume starts at 75% on a freshly flashed device. After you change it (for example from the Motion Sound Player in Home Assistant), the new volume is saved and kept across reboots and OTA updates.
+## Behavior
 
-If the saved Wi-Fi network can't be reached for 1 minute, the device starts a fallback hotspot named after the device (for example `gato-dorado-98d3d0`), protected by `fallback_ap_password` in `secrets.yaml`. That file is gitignored: copy [`secrets.example.yaml`](secrets.example.yaml) to `secrets.yaml` and set your own password (at least 8 characters) before building; the Makefile stops with a message if it is missing. Join it from a phone or laptop: the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. OTA and the Home Assistant API also work over the hotspot. The device keeps retrying the saved network while the hotspot is up.
+### Motion and short button presses
 
-The **Mute** switch shows and sets the same sound mute as the 3–6 second button hold, with the same beep cues; it follows button changes too.
+Each motion rising edge, and each button press released within 3 seconds, runs the same sequence:
 
-The **Arm Speed** slider (0–10, default 7, kept across reboot) scales the sweep and wiggle speed: 5 is the base speed (2 s per sweep segment, set by `sweep_segment_ms`), 7 is about 0.87 s, 0 is slowest (about 3.5 s), and 10 is fastest (0.25 s). Each step changes speed by a constant ratio within each half of the range.
+- **Sound:** a clip picked at random from the `MEOWS` list in `play_random_meow` (25 meows plus `hola`) plays unless sound is muted or rate limited. A new clip interrupts the one already playing.
+- **Arm:** the servo eases from center to the front, sweeps to the back, eases back to center, and keeps holding center. Each of the three segments takes `sweep_segment_ms` (2 s) scaled by Arm Speed: about 0.87 s at the default speed 7, or about 2.6 s for the whole sweep. The servo stays attached between movements because a detached arm drifts, and the next sweep would snap it back to center at full speed.
+- **Arm lock:** while a sweep or growl wiggle is running, new triggers do not start another movement, but they still play a clip.
 
-Confirm the presence sensor's output polarity and electrical level before connecting it; ESP32 GPIOs are not 5 V tolerant. GPIO15 is a boot-strapping pin; the MAX98357 DIN input should be high impedance, but avoid adding pulls to GPIO15 and move I²S DOUT to another suitable GPIO if the board has boot issues.
+Triggers are counted in 60-second windows (`sound_burst_window_ms`). After 40 triggers (`sound_burst_limit`) in one window, clips play at most once every 30 seconds (`sound_min_interval_ms`) until the window ends. The arm still moves, and button cues are not limited.
 
-For amplifier pinout details, see [Adafruit's MAX98357 pinout guide](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pinouts). The MAX98357 takes digital I²S (not analog audio), and MCLK is not required. Its speaker outputs are bridge-tied/floating: use a 4 Ω or higher moving-coil speaker across the output pair, and do not connect either speaker terminal to ground. The amp supply range is 2.5–5.5 V; Adafruit recommends 5 V for higher output power with a supply sized for the speaker load. ESP32 3.3 V logic is compatible with the I²S inputs. Follow the markings/specifications for the specific amplifier breakout in use.
+### Button holds
+
+| Button | Action |
+| --- | --- |
+| Released within 3 s | Same as motion: a clip and one arm sweep |
+| Released after 3–6 s | Toggles sound mute. Muting stops the current clip and plays `beep.wav`; unmuting plays `3beeps.wav`. |
+| Held for 6 s | Stops the current clip, plays `growl.wav`, and wiggles the arm over a shorter arc without changing mute. The wiggle is 16 segments of `wiggle_segment_ms` (375 ms) scaled by Arm Speed: about 2.6 s at speed 7. If the arm is mid-sweep, the growl and wiggle wait for the sweep to finish. |
+
+Cue sounds (beeps, growl, and the boot clip) play even while sound is muted. Mute is saved and kept across reboots.
+
+### Boot
+
+At boot the arm is centered immediately. The device plays the clip named by `boot_sound` (`win-startup.wav` as configured, or `beep.wav` when it is set to `beep`), then runs the motion sequence once. If sound was muted before the reboot, the arm still moves but the clip is skipped.
+
+### Home Assistant
+
+When the device is connected to Home Assistant through the ESPHome API, it provides:
+
+- **Animate Arm**, **Meow**, and **Meow and Arm** buttons. They ignore mute and the rate limit; the arm sweep is still skipped if the arm is already moving. A **Hola** button plays only the hola clip, for debugging.
+- A **Mute** switch that shows and sets the same mute as the 3–6 second button hold, with the same cues.
+- An **Arm Speed** slider (0–10, default 7, kept across reboot) that scales the sweep and wiggle speed. 5 is the base speed (2 s per sweep segment, set by `sweep_segment_ms`), 7 is about 0.87 s, 0 is slowest (about 3.5 s), and 10 is fastest (0.25 s). Each step changes speed by a constant ratio within each half of the range.
+- The **Motion Sound Player** media player. Its volume starts at 75% on a freshly flashed device; a volume you set is saved and kept across reboots and OTA updates.
+- **Motion** and **Button** binary sensors.
+- Two diagnostic sensors in the device's Diagnostic section: **Uptime** (seconds since boot, updated every minute) and **Last Reset Reason** (for example power-on, `software via esp_restart` after an OTA update, task or interrupt watchdog, brownout, or a crash/panic).
+
+## Wi-Fi and first-time setup
+
+Each device names itself `gato-dorado-` plus the last six hex digits of its MAC address (for example `gato-dorado-98d3d0`), and appears as GatoDorado in Home Assistant. The firmware contains no Wi-Fi credentials:
+
+- **First boot:** with no saved network, the device immediately starts a hotspot with its own name, protected by `fallback_ap_password`. Join it from a phone or laptop; the captive portal opens (or browse to `http://192.168.4.1`) to scan for and save a Wi-Fi network. While no network is saved, the device also accepts Wi-Fi setup over Bluetooth with [Improv](https://www.improv-wifi.com/).
+- **Later:** if the saved network can't be reached for 1 minute, the hotspot starts again, and the device keeps retrying the saved network. OTA and the Home Assistant API also work over the hotspot.
+
+`fallback_ap_password` is set in `secrets.yaml`, which is gitignored. Copy [`secrets.example.yaml`](secrets.example.yaml) to `secrets.yaml` and set your own password (at least 8 characters) before building; the Makefile stops with a message if the file is missing.
+
+The ESPHome API has no encryption key, OTA updates have no password, and Bluetooth Wi-Fi setup needs no button press. Anyone on the same network can control or reflash the device, and anyone nearby can give it Wi-Fi credentials while it has none saved. Add an `api` encryption key and an `ota` password (both can come from `secrets.yaml`) before using it on a shared network.
 
 ## Build, flash, and logs
 
@@ -52,9 +89,9 @@ make ota OTA_HOST=10.0.1.23                # bypasses mDNS
 make logs PORT=/dev/cu.YOUR_ESP32_SERIAL_PORT
 ```
 
-The motion input is GPIO33. The I²S connections are listed above. If the first upload cannot enter bootloader mode automatically, hold the board's BOOT button while starting the flash, then release it when writing begins.
+If the first upload cannot enter bootloader mode automatically, hold the board's BOOT button while starting the flash, then release it when writing begins.
 
-The OTA target installs its tools on first use, compiles, and uploads the generated OTA binary on port `3232`. The separate `.venv-ota` environment uses the system Python on macOS to avoid local-network permission failures from Homebrew Python. Set `OTA_PASSWORD` if the device has an OTA password.
+The OTA target installs its tools on first use, compiles, and uploads the generated OTA binary on port `3232`. It reads the build directory from `esphome.name` in `motion-sound.yaml`. The OTA tools live in a separate `.venv-ota` environment built on the system Python on macOS, which avoids local-network permission failures seen with Homebrew Python. That Python is 3.9, so `requirements-ota.txt` pins ESPHome 2025.5.2, the newest release that installs on it; only its OTA uploader is used. Set `OTA_PASSWORD` if you add an OTA password.
 
 The sound URL manifest is [`sounds/sources.txt`](sounds/sources.txt). Cue clips live in [`media/sfx/`](media/sfx/). `make config`, `make compile`, `make flash`, `make ota`, and `make logs` prepare sounds before invoking ESPHome. Original downloads are cached under `.cache/sounds/downloads/`; normalized files consumed by ESPHome are under `.cache/sounds/`. Both are gitignored, so generated WAV and MP3 files are not tracked in this repository. The `media/sfx/` sources are tracked.
 
@@ -96,7 +133,7 @@ The manifest maps these ESPHome `audio_file` IDs to source WAVs from [haydenroch
 | `meow_youtube_dc_42` | [youtube_acm9dCI5_dc_42.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/youtube_acm9dCI5_dc_42.wav) |
 | `meow_youtube_dc_52` | [youtube_acm9dCI5_dc_52.wav](https://raw.githubusercontent.com/haydenroche5/meow_dataset/master/meow/youtube_acm9dCI5_dc_52.wav) |
 
-The meow source clips are already mono, 16-bit, 16 kHz, so downsampling is unnecessary. `scripts/prepare_sounds.py` fetches each URL, strips trailing metadata chunks, normalizes the peak to -1 dBFS, and pads an odd sample count by one silent frame. The padding avoids a decoder edge case observed with one odd-length clip. The same script converts `media/sfx/` to mono 16 kHz: `beep.wav` and `win-startup.wav` are mixed down from stereo, `growl.wav` is decoded from AIFF, and `purring.wav` and `win-startup.wav` are resampled from 22 kHz. Each normalized WAV is then encoded to a 32 kbps mono MP3 with `lameenc` (installed into `.venv` from `requirements.txt`), and the MP3s are embedded in firmware flash. MP3 is about 8× smaller than 16-bit WAV, which keeps the image well below the OTA app partition size; the ESP32 decodes MP3 in firmware. To add a meow, append a line to `sounds/sources.txt`, add a matching `audio_file` entry, and add its URL to the `MEOWS` list in `play_random_meow`.
+The meow source clips are already mono, 16-bit, 16 kHz, so downsampling is unnecessary. `scripts/prepare_sounds.py` fetches each URL, strips trailing metadata chunks, normalizes the peak to -1 dBFS, and pads an odd sample count by one silent frame. The padding avoids a decoder edge case observed with one odd-length clip. The same script converts the `media/sfx/` clips to mono 16 kHz: it mixes the stereo clips (`beep.wav`, `purring.wav`, and `win-startup.wav`) down to mono, resamples every clip except `hola.wav` from 22.05 kHz, and decodes `growl.wav`, which is an AIFF file despite its extension. Each normalized WAV is then encoded to a 32 kbps mono MP3 with `lameenc` (installed into `.venv` from `requirements.txt`), and the MP3s are embedded in firmware flash. MP3 is about 8× smaller than 16-bit WAV, which keeps the image well below the OTA app partition size; the ESP32 decodes MP3 in firmware. To add a meow, append a line to `sounds/sources.txt`, add a matching `audio_file` entry, and add its URL to the `MEOWS` list in `play_random_meow`.
 
 | ESPHome ID | Source | When it plays |
 | --- | --- | --- |
@@ -105,10 +142,8 @@ The meow source clips are already mono, 16-bit, 16 kHz, so downsampling is unnec
 | `win_startup` | `media/sfx/win-startup.wav` | Boot, when `boot_sound` is `win_startup` (the configured default) |
 | `growl` | `media/sfx/growl.wav` | Button held for 6 seconds, with the arm wiggle |
 | `hola` | `media/sfx/hola.wav` | Spanish "hola", picked at random like a meow (it is in the `MEOWS` list) |
-| `purring` | `media/sfx/purring.wav` | Random motion or short-press clip, weighted by `purr_ratio` |
+| `purring` | `media/sfx/purring.wav` | Random motion or short-press clip, weighted by `purr_ratio`; never with the configured `0` |
 
-Each motion rising edge, and each short press of the GPIO32 button, picks a clip if the player is idle and sound is not muted. The log line prints the clip ID. Meows are picked uniformly from the `MEOWS` list in `play_random_meow`. `purr_ratio` at the top of `motion-sound.yaml` is how many times more often the purr is chosen than any one meow; the configured `0` plays only meows. Every additional embedded clip increases firmware/flash usage. Releasing the button between 3 and 6 seconds toggles mute and stops any clip that is playing. A hold of 6 seconds plays the growl and wiggles the arm without changing mute.
-
-Meow playback is rate limited by the substitutions at the top of `motion-sound.yaml`. The defaults allow 4 triggers in 60 seconds, then at most one meow every 30 seconds. Triggers past that limit still move the arm. A quiet gap of one full window restores a meow on every trigger. Button cues are not limited.
+Clips are picked uniformly from the `MEOWS` list, and the log line prints the clip ID. `purr_ratio` at the top of `motion-sound.yaml` is how many times more often the purr is chosen than any one meow; the configured `0` plays only the `MEOWS` list. Every additional embedded clip increases firmware size: with the current 31 clips, the firmware uses about 1.5 MB of the 1.97 MB app partition.
 
 The presence sensor used during bring-up is documented at [RCWL-0516](https://github.com/tarantula3/RCWL-0516).
