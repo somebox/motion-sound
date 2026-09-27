@@ -6,6 +6,10 @@ BOOTSTRAP_PYTHON ?= $(shell for python in python3.14 python3.13 python3.12 pytho
 		command -v "$$python"; break; \
 	fi; \
 done)
+# OTA uploads run from the system Python on macOS, which avoids local-network
+# permission failures seen with Homebrew Python. That Python is 3.9, so
+# requirements-ota.txt pins the newest ESPHome that still installs on it; only
+# its OTA uploader (esphome.espota2) is used.
 OTA_BOOTSTRAP_PYTHON ?= $(if $(wildcard /usr/bin/python3),/usr/bin/python3,$(BOOTSTRAP_PYTHON))
 VENV_DIR := .venv
 OTA_VENV_DIR := .venv-ota
@@ -16,7 +20,10 @@ OTA_ESPHOME_STAMP := $(OTA_VENV_DIR)/.installed
 OTA_HOST ?=
 OTA_PORT ?= 3232
 OTA_PASSWORD ?=
-OTA_BINARY := .esphome/build/gato-dorado/build/firmware.ota.bin
+# ESPHome builds into .esphome/build/<esphome.name>/, so read the name from the
+# YAML instead of repeating it here.
+DEVICE_NAME := $(shell sed -n 's/^  name: *//p' motion-sound.yaml | head -n 1 | tr -d "\"'")
+OTA_BINARY := .esphome/build/$(DEVICE_NAME)/build/firmware.ota.bin
 
 .PHONY: tools ota-tools secrets sounds config compile flash ota logs clean
 
@@ -54,7 +61,8 @@ flash: compile
 	$(ESPHOME) upload motion-sound.yaml --device "$(PORT)"
 
 ota: compile ota-tools
-	@test -n "$(OTA_HOST)" || { echo "Set OTA_HOST to the device IP or mDNS name, e.g. make ota OTA_HOST=gato-dorado-98d3d0.local" >&2; exit 2; }
+	@test -n "$(OTA_HOST)" || { echo "Set OTA_HOST to the device IP or mDNS name, e.g. make ota OTA_HOST=$(DEVICE_NAME)-98d3d0.local" >&2; exit 2; }
+	@test -f "$(OTA_BINARY)" || { echo "$(OTA_BINARY) is missing. Check esphome.name in motion-sound.yaml." >&2; exit 2; }
 	$(OTA_PYTHON) -c 'import logging, sys; from esphome.espota2 import run_ota; logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s"); sys.exit(run_ota(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4]))' \
 		"$(OTA_HOST)" "$(OTA_PORT)" "$(OTA_PASSWORD)" "$(OTA_BINARY)"
 
@@ -63,7 +71,7 @@ logs: tools secrets sounds
 	$(ESPHOME) logs motion-sound.yaml --device "$(PORT)"
 
 # Remove downloaded/processed sounds and ESPHome build output. The next
-# make config/compile/flash/logs will download and prepare the WAVs again.
+# make config/compile/flash/ota/logs will download the WAVs and encode the MP3s again.
 clean:
 	rm -rf .cache/sounds .esphome
 	rmdir .cache 2>/dev/null || true
