@@ -32,13 +32,13 @@ For amplifier pinout details, see [Adafruit's MAX98357 pinout guide](https://lea
 
 ### Motion and short button presses
 
-Each motion rising edge, and each button press released within 3 seconds, runs the same sequence:
+Each motion rising edge runs the arm sequence, with sensor meows gated as described below. A short button press keeps the existing sound-and-arm sequence:
 
-- **Sound:** a clip picked at random from the `MEOWS` list in `play_random_meow` (25 meows plus `hola`) plays unless sound is muted or rate limited. A new clip interrupts the one already playing.
+- **Sensor sound:** a random clip plays only after an inactivity gap and at least 15 minutes since the previous sensor-triggered clip. The quiet requirement starts at 2 minutes and grows with recent motion activity, up to 10 minutes total; the activity estimate decays with a 2-minute time constant. This approximates a new arrival after the area clears, but does not identify people. Short button presses keep their existing sound behavior.
 - **Arm:** the servo eases from center to the front, sweeps to the back, eases back to center, and keeps holding center. Each of the three segments takes `sweep_segment_ms` (2 s) scaled by Arm Speed: about 0.87 s at the default speed 7, or about 2.6 s for the whole sweep. The servo stays attached between movements because a detached arm drifts, and the next sweep would snap it back to center at full speed.
 - **Arm lock:** while a sweep or growl wiggle is running, new triggers do not start another movement, but they still play a clip.
 
-Triggers are counted in 60-second windows (`sound_burst_window_ms`). After 40 triggers (`sound_burst_limit`) in one window, clips play at most once every 30 seconds (`sound_min_interval_ms`) until the window ends. The arm still moves, and button cues are not limited.
+Startup and short physical-button triggers are counted in 60-second windows (`sound_burst_window_ms`). After 40 triggers (`sound_burst_limit`) in one window, their meows play at most once every 30 seconds (`sound_min_interval_ms`) until the window ends. Sensor-triggered meows use the inactivity and cooldown gate above. The arm still moves, and button cues are not limited.
 
 ### Button holds
 

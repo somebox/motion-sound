@@ -2,7 +2,7 @@
 # limiter times are milliseconds so the firmware can compare them with millis().
 substitutions:
   # Printed once when startup finishes. Bump this when the flashed behavior changes.
-  firmware_version: "0.1.22"
+  firmware_version: "0.1.23"
 
   # Duration of each beckon sweep segment (center-front, front-back, back-center)
   # at Arm Speed 5. Arm Speed 0 takes 1.74x longer; speed 10 is 8x faster.
@@ -11,9 +11,9 @@ substitutions:
   # Duration of each growl wiggle quarter at Arm Speed 5, scaled the same way.
   wiggle_segment_ms: "375"
 
-  # Meows play on every trigger until this many triggers occur in one window.
-  # The next trigger slows meows to sound_min_interval_ms. The arm still moves.
-  # Button cues (beep, 3beeps, growl) are not counted or limited.
+  # Startup and short-button meows play until this many triggers occur in one window.
+  # The next trigger slows those meows to sound_min_interval_ms. The arm still moves.
+  # Sensor meows use the inactivity gate below; button cues are not limited.
   sound_burst_limit: "40"
 
   # Trigger-counting window. A quiet gap this long restores a meow on every trigger.
@@ -21,6 +21,14 @@ substitutions:
 
   # While the burst limit is exceeded, play at most one meow per this interval.
   sound_min_interval_ms: "30000"
+
+  # Sensor meows require a quiet gap, extended by recent motion activity.
+  # Activity decays with this time constant; each activity point adds quiet time.
+  motion_base_quiet_ms: "120000"
+  motion_activity_decay_ms: "120000"
+  motion_busy_extra_quiet_ms: "60000"
+  motion_max_extra_quiet_ms: "480000"
+  motion_sound_cooldown_ms: "900000"
 
   # How many times more often the purr is chosen than any one meow clip.
   # Each meow clip has weight 1. A ratio equal to the number of meows makes the
@@ -143,6 +151,26 @@ globals:
     type: bool
     restore_value: no
     initial_value: "true"
+  - id: motion_activity
+    type: float
+    restore_value: no
+    initial_value: "0.0"
+  - id: motion_required_quiet_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: ${motion_base_quiet_ms}
+  - id: last_motion_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: last_motion_meow_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: allow_motion_meow
+    type: bool
+    restore_value: no
+    initial_value: "false"
   - id: move_started_ms
     type: uint32_t
     restore_value: no
@@ -332,6 +360,40 @@ script:
       - if:
           condition:
             lambda: return id(allow_meow);
+          then:
+            - script.execute: play_random_meow
+      - script.execute: start_arm_sweep
+  - id: handle_motion_detection
+    mode: single
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const uint32_t inactive_ms = now - id(last_motion_ms);
+          const uint32_t required_quiet_ms = id(motion_required_quiet_ms);
+          const bool quiet_entry = inactive_ms >= required_quiet_ms;
+          const float decay = expf(-static_cast<float>(inactive_ms) / ${motion_activity_decay_ms});
+          const float activity = id(motion_activity) * decay;
+          const float updated_activity = activity < 8.0f ? activity + 1.0f : 8.0f;
+          const float extra_quiet_ms = updated_activity * ${motion_busy_extra_quiet_ms};
+          const uint32_t bounded_extra_quiet_ms = extra_quiet_ms < ${motion_max_extra_quiet_ms}
+              ? static_cast<uint32_t>(extra_quiet_ms)
+              : ${motion_max_extra_quiet_ms};
+          const bool cooldown_elapsed = id(last_motion_meow_ms) == 0 ||
+              (now - id(last_motion_meow_ms)) >= ${motion_sound_cooldown_ms};
+          const bool allow = quiet_entry && cooldown_elapsed && !id(sound_muted);
+          id(motion_activity) = updated_activity;
+          id(motion_required_quiet_ms) = ${motion_base_quiet_ms} + bounded_extra_quiet_ms;
+          id(last_motion_ms) = now;
+          id(allow_motion_meow) = allow;
+          if (allow) {
+            id(last_motion_meow_ms) = now;
+          }
+          ESP_LOGI("motion_sound", "Motion activity %.1f; idle %u/%u ms; sensor meow %s",
+              activity, static_cast<unsigned>(inactive_ms), static_cast<unsigned>(required_quiet_ms),
+              allow ? "allowed" : "suppressed");
+      - if:
+          condition:
+            lambda: return id(allow_motion_meow);
           then:
             - script.execute: play_random_meow
       - script.execute: start_arm_sweep
@@ -529,7 +591,7 @@ binary_sensor:
     on_press:
       then:
         - logger.log: "Motion detected"
-        - script.execute: play_motion_sequence
+        - script.execute: handle_motion_detection
   - platform: gpio
     id: control_button
     name: "Button"
